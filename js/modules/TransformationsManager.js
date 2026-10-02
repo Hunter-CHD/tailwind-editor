@@ -12,7 +12,7 @@ export class TransformationsManager {
     this.maxLogs = 100;
     this.paused = false;
     this.isApplyingTransformations = false;
-    this.autoTransformDelay = 1500; // ms delay before applying auto transforms
+    this.autoTransformDelay = 5000; // ms delay before applying auto transforms
     
     // Create debounced function as instance property
     this.debouncedAutoTransform = debounce((content) => {
