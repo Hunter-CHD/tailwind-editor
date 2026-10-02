@@ -1,6 +1,8 @@
 /**
  * TransformationsManager - Manages JavaScript transformations on editor content
  */
+import { debounce } from '../utils/debounce.js';
+
 export class TransformationsManager {
   constructor(storageService, eventBus) {
     this.storage = storageService;
@@ -10,6 +12,12 @@ export class TransformationsManager {
     this.maxLogs = 100;
     this.paused = false;
     this.isApplyingTransformations = false;
+    this.autoTransformDelay = 1500; // ms delay before applying auto transforms
+    
+    // Create debounced function as instance property
+    this.debouncedAutoTransform = debounce((content) => {
+      this.runAutoTransformations(content);
+    }, this.autoTransformDelay);
     
     this.load();
     this.setupEventListeners();
@@ -18,7 +26,7 @@ export class TransformationsManager {
   setupEventListeners() {
     // Listen for editor changes to run auto transformations
     this.eventBus.on('editor:changed', (content) => {
-      this.runAutoTransformations(content);
+      this.debouncedAutoTransform(content);
     });
   }
 
@@ -318,8 +326,9 @@ export class TransformationsManager {
 
     if (autoTransformations.length === 0) return;
 
-    // Set flag to prevent re-entry
+    // Set flag to prevent re-entry and cancel any pending debounced calls
     this.isApplyingTransformations = true;
+    this.debouncedAutoTransform.cancel();
 
     let result = code;
     for (const transformation of autoTransformations) {
@@ -334,8 +343,10 @@ export class TransformationsManager {
       this.eventBus.emit('transformations:apply', result);
     }
 
-    // Clear flag immediately since editor won't emit change events
-    this.isApplyingTransformations = false;
+    // Clear flag after a delay to ensure editor has settled
+    setTimeout(() => {
+      this.isApplyingTransformations = false;
+    }, 200);
   }
   
   /**
