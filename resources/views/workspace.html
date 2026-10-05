@@ -1,0 +1,272 @@
+<header class="app-header">
+  <a class="brand" href="./" aria-label="Tailwind Editor home"
+    ><span class="brand-mark">&lt;/&gt;</span><span>Tailwind <strong>Editor</strong></span></a
+  >
+  <div class="header-actions">
+    <span id="save-status" class="save-status" role="status">Opening…</span>
+    <button data-action="themes">Themes</button>
+    <button data-action="settings">Settings</button>
+    <button data-action="export" class="primary">Export <span aria-hidden="true">↗</span></button>
+  </div>
+</header>
+<main class="app-layout">
+  <aside id="documents-sidebar" class="sidebar" aria-label="Documents">
+    <div class="sidebar-heading">
+      <h1>Documents</h1>
+      <button data-action="new" class="icon-button" aria-label="New document">+</button>
+    </div>
+    <div id="document-list" class="document-list"></div>
+    <div class="sidebar-bottom">
+      <button data-action="import-html" class="import-button" aria-label="Import HTML">
+        <span class="icon">↑</span> <span>Import HTML</span>
+      </button>
+      <button data-action="transformations" aria-label="Transformations">
+        <span class="icon">⌘</span> <span>Transformations</span><span id="transform-count" class="count">0</span>
+      </button>
+      <div class="local-note">
+        <span class="status-dot"></span>
+        <div>Stored on this device<small>Your work saves automatically.</small></div>
+      </div>
+    </div>
+  </aside>
+  <section class="work-area" aria-label="Editor workspace">
+    <div class="document-toolbar">
+      <div class="document-heading">
+        <button
+          id="toggle-documents"
+          data-action="toggle-documents"
+          class="icon-button sidebar-toggle"
+          aria-label="Hide documents"
+          title="Hide documents"
+          aria-controls="documents-sidebar"
+          aria-expanded="true"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            aria-hidden="true"
+          >
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M9 4v16M5.5 8h1M5.5 12h1M5.5 16h1" />
+          </svg>
+        </button>
+        <div>
+          <span class="eyebrow">EDITING</span
+          ><button id="document-name" data-action="rename" title="Rename document"></button>
+        </div>
+      </div>
+      <div class="toolbar-actions">
+        <button data-action="duplicate" title="Duplicate document">Duplicate</button
+        ><button data-action="format">Format <kbd>Alt Shift F</kbd></button
+        ><button
+          data-action="delete"
+          class="icon-button"
+          aria-label="Delete document"
+          title="Delete document"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+    <div class="split-workspace" id="split-workspace">
+      <section class="editor-pane" aria-label="Source code">
+        <div class="pane-toolbar">
+          <span class="pane-title"><span class="code-icon">&lt;&gt;</span> HTML</span
+          ><span class="subtle">Tailwind utilities</span>
+          <button id="focus-preview" data-action="popout" hidden>Focus preview ↗</button>
+        </div>
+        <div id="editor" class="editor"></div>
+      </section>
+      <div
+        id="splitter"
+        class="splitter"
+        role="separator"
+        aria-label="Resize editor"
+        aria-orientation="vertical"
+        aria-valuemin="25"
+        aria-valuemax="75"
+        aria-valuenow="50"
+        tabindex="0"
+      ></div>
+      <section class="preview-pane" aria-label="Live preview">
+        <div class="pane-toolbar">
+          <span class="pane-title"><span class="status-dot"></span> Preview</span>
+          <div class="preview-controls">
+            <select id="viewport" aria-label="Preview width">
+              <option value="100%">Responsive</option>
+              <option value="768px">Tablet · 768</option>
+              <option value="390px">Mobile · 390</option></select
+            ><button
+              data-action="popout"
+              class="icon-button"
+              aria-label="Open preview in a new tab"
+              title="Open preview in a new tab"
+            >
+              ↗
+            </button>
+          </div>
+        </div>
+        <div class="preview-stage">
+          <iframe
+            id="preview"
+            title="HTML preview"
+            sandbox="allow-scripts"
+            referrerpolicy="no-referrer"
+          ></iframe>
+        </div>
+      </section>
+    </div>
+    <footer class="workspace-footer">
+      <span id="compile-status" role="status">Preparing preview…</span
+      ><span
+        >HTML + CSS <span class="footer-dot">·</span> <span id="css-size">0 KB</span> generated
+        CSS</span
+      >
+    </footer>
+  </section>
+</main>
+<div id="notice" class="notice" role="status" hidden></div>
+<input id="file-input" type="file" hidden />
+
+<dialog id="name-dialog" class="small-dialog">
+  <form id="name-form">
+    <div class="dialog-heading">
+      <h2 id="name-title">Rename document</h2>
+      <button type="button" data-close class="icon-button" aria-label="Close">×</button>
+    </div>
+    <label>File name<input id="name-input" required maxlength="100" autocomplete="off" /></label>
+    <div class="dialog-footer">
+      <button type="button" data-close>Cancel</button
+      ><button class="primary" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="theme-dialog">
+  <div class="dialog-heading">
+    <div>
+      <h2>Make it your space</h2>
+      <p>Choose the editor's appearance and your page's palette.</p>
+    </div>
+    <button data-close class="icon-button" aria-label="Close">×</button>
+  </div>
+  <h3>Editor appearance</h3>
+  <div id="theme-presets" class="theme-presets"></div>
+  <form id="custom-theme-form">
+    <div class="color-fields">
+      <label>Background<input type="color" name="background" /></label
+      ><label>Surface<input type="color" name="surface" /></label
+      ><label>Text<input type="color" name="text" /></label
+      ><label>Accent<input type="color" name="accent" /></label>
+    </div>
+    <button type="submit">Save custom theme</button>
+  </form>
+  <hr />
+  <form id="palette-form">
+    <h3>Document colors</h3>
+    <p>
+      Named colors become utilities like <code>bg-brand</code>, <code>text-ink/70</code>, and
+      <code>border-brand</code>. They travel with this document.
+    </p>
+    <label for="palette-json">Color names and hex values</label
+    ><textarea id="palette-json" class="code-input" rows="6" spellcheck="false"></textarea>
+    <div class="dialog-footer">
+      <span class="subtle">Applies to the preview and export.</span
+      ><button type="submit" class="primary">Apply colors</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="export-dialog" class="wide-dialog">
+  <div class="dialog-heading">
+    <div>
+      <h2>Ready to take with you</h2>
+      <p>Your HTML with generated CSS included. No document boilerplate is added.</p>
+    </div>
+    <button data-close class="icon-button" aria-label="Close">×</button>
+  </div>
+  <div id="export-stats" class="export-stats"></div>
+  <textarea
+    id="export-source"
+    class="code-input export-source"
+    readonly
+    aria-label="Export source"
+    spellcheck="false"
+  ></textarea>
+  <p class="subtle">
+    Includes automatic preview transformations, then export-only transformations. Classes created
+    only by JavaScript must be listed in Settings → Additional classes.
+  </p>
+  <div class="dialog-footer">
+    <button data-action="copy-export">Copy CSS + HTML</button
+    ><button data-action="download-export" class="primary">Download HTML</button>
+  </div>
+</dialog>
+
+<dialog id="settings-dialog">
+  <div class="dialog-heading">
+    <div>
+      <h2>Workspace settings</h2>
+      <p>A few useful defaults. Everything stays in this browser.</p>
+    </div>
+    <button data-close class="icon-button" aria-label="Close">×</button>
+  </div>
+  <form id="settings-form">
+    <div class="settings-row">
+      <label for="font-size">Editor font size</label
+      ><input id="font-size" type="number" min="11" max="24" required />
+    </div>
+    <label class="checkbox-label"><input id="word-wrap" type="checkbox" /> Wrap long lines</label>
+    <hr />
+    <h3>Current document</h3>
+    <label class="checkbox-label"
+      ><input id="preflight" type="checkbox" /> Include Tailwind base styles (Preflight)</label
+    >
+    <label for="safelist">Additional classes</label
+    ><textarea
+      id="safelist"
+      rows="3"
+      placeholder="hidden block bg-brand hover:bg-brand/80"
+      spellcheck="false"
+    ></textarea>
+    <p class="subtle">
+      Space-separated utilities used by scripts or added later. Other utilities are generated from
+      your HTML.
+    </p>
+    <div class="dialog-footer"><button class="primary" type="submit">Save settings</button></div>
+  </form>
+  <hr />
+  <h3>Workspace backup</h3>
+  <p>Back up documents, colors, transformations, and settings as a readable JSON file.</p>
+  <div class="button-row">
+    <button data-action="backup">Download backup</button
+    ><button data-action="restore">Restore backup</button>
+  </div>
+  <p id="storage-size" class="subtle"></p>
+</dialog>
+
+<dialog id="transform-dialog" class="wide-dialog">
+  <div class="dialog-heading">
+    <div>
+      <h2>Transformations</h2>
+      <p>Edit a shared <code>document</code>, or use <code>code</code> for string operations.</p>
+    </div>
+    <button data-close class="icon-button" aria-label="Close">×</button>
+  </div>
+  <p class="subtle">
+    DOM transforms share one parsed document per pipeline. Stages run in order: editor, preview,
+    then export only. Export-only transforms never change your source or live preview. Only run code
+    you trust; workers have a three-second execution limit.
+  </p>
+  <div class="button-row">
+    <button data-action="add-transform">+ Add transformation</button
+    ><button data-action="import-transforms">Import</button
+    ><button data-action="export-transforms">Export</button>
+  </div>
+  <div id="transformation-list" class="transformation-list"></div>
+  <p id="transform-log" class="subtle" role="status"></p>
+</dialog>
