@@ -175,7 +175,7 @@
   <div class="dialog-heading">
     <div>
       <h2>Make it your space</h2>
-      <p>Choose the editor's appearance and your page's palette.</p>
+      <p>Choose the editor's appearance.</p>
     </div>
     <button data-close class="icon-button" aria-label="Close">×</button>
   </div>
@@ -189,20 +189,6 @@
       ><label>Accent<input type="color" name="accent" /></label>
     </div>
     <button type="submit">Save custom theme</button>
-  </form>
-  <hr />
-  <form id="palette-form">
-    <h3>Document colors</h3>
-    <p>
-      Named colors become utilities like <code>bg-brand</code>, <code>text-ink/70</code>, and
-      <code>border-brand</code>. They travel with this document.
-    </p>
-    <label for="palette-json">Color names and hex values</label
-    ><textarea id="palette-json" class="code-input" rows="6" spellcheck="false"></textarea>
-    <div class="dialog-footer">
-      <span class="subtle">Applies to the preview and export.</span
-      ><button type="submit" class="primary">Apply colors</button>
-    </div>
   </form>
 </dialog>
 
@@ -281,6 +267,14 @@
       Space-separated utilities used by scripts or added later. Other utilities are generated from
       your HTML.
     </p>
+    <hr />
+    <h3>Document colors</h3>
+    <p>
+      Named colors become utilities like <code>bg-brand</code>, <code>text-ink/70</code>, and
+      <code>border-brand</code>. They apply to this document's preview and export.
+    </p>
+    <label for="palette-json">Color names and hex values</label
+    ><textarea id="palette-json" class="code-input" rows="6" spellcheck="false"></textarea>
     <div class="dialog-footer"><button class="primary" type="submit">Save settings</button></div>
   </form>
 </dialog>

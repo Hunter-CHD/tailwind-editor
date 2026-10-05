@@ -195,10 +195,12 @@ test('popout follows edits, colors, and document switches and can be reused or r
   await expect(popup.frameLocator('iframe').locator('h1')).toHaveText('Updated live');
   await popup.reload();
   await expect(popup.frameLocator('iframe').locator('h1')).toHaveText('Updated live');
-  await page.getByRole('button', { name: 'Themes', exact: true }).click();
+  await page.getByRole('button', { name: 'Document settings', exact: true }).click();
   await page.locator('#palette-json').fill('{"brand":"#ff0000"}');
-  await page.getByRole('button', { name: 'Apply colors' }).click();
-  await page.locator('#theme-dialog [data-close]').click();
+  await page
+    .locator('#document-settings-dialog')
+    .getByRole('button', { name: 'Save settings', exact: true })
+    .click();
   await expect(popup.frameLocator('iframe').locator('h1')).toHaveCSS('color', 'rgb(255, 0, 0)');
 
   await page.getByRole('button', { name: 'New document', exact: true }).click();
@@ -448,15 +450,27 @@ test('export-only transformations affect export and its CSS without changing sou
 test('document colors and a custom interface theme persist', async ({ page }) => {
   await openEditor(page);
   await page.getByRole('button', { name: 'Themes', exact: true }).click();
+  await expect(page.locator('#theme-dialog #palette-json')).toHaveCount(0);
   await page.locator('#custom-theme-form [name="background"]').fill('#102030');
   await page.locator('#custom-theme-form [name="surface"]').fill('#182838');
   await page.locator('#custom-theme-form [name="text"]').fill('#eeeeee');
   await page.getByRole('button', { name: 'Save custom theme' }).click();
+  await page.locator('#theme-dialog [data-close]').click();
+  await page.getByRole('button', { name: 'Document settings', exact: true }).click();
+  await page.locator('#palette-json').fill('[]');
+  await page
+    .locator('#document-settings-dialog')
+    .getByRole('button', { name: 'Save settings', exact: true })
+    .click();
+  await expect(page.locator('#notice')).toHaveText('Colors must be a JSON object.');
+  await expect(page.locator('#document-settings-dialog')).toBeVisible();
   await page
     .locator('#palette-json')
     .fill('{"brand":"#ff0000","canvas":"#ffffff","ink":"#111111"}');
-  await page.getByRole('button', { name: 'Apply colors' }).click();
-  await page.locator('#theme-dialog [data-close]').click();
+  await page
+    .locator('#document-settings-dialog')
+    .getByRole('button', { name: 'Save settings', exact: true })
+    .click();
   await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.reload();
   await expect(page.locator('#compile-status')).toContainText('Live preview');
@@ -509,6 +523,11 @@ test('document settings stay with each document and separate from workspace pref
   const documentSettings = page.getByRole('dialog', { name: 'Document settings', exact: true });
   await gear.click();
   await expect(documentSettings.locator('#document-settings-name')).toHaveText('Welcome.html');
+  const firstColors = JSON.parse(
+    await documentSettings.getByLabel('Color names and hex values').inputValue(),
+  );
+  firstColors.brand = '#ff0000';
+  await documentSettings.getByLabel('Color names and hex values').fill(JSON.stringify(firstColors));
   await documentSettings.getByLabel('Include Tailwind base styles (Preflight)').uncheck();
   await documentSettings.getByLabel('Additional classes').fill('hidden');
   await documentSettings.getByRole('button', { name: 'Save settings', exact: true }).click();
@@ -523,6 +542,14 @@ test('document settings stay with each document and separate from workspace pref
     documentSettings.getByLabel('Include Tailwind base styles (Preflight)'),
   ).toBeChecked();
   await expect(documentSettings.getByLabel('Additional classes')).toHaveValue('');
+  const secondColors = JSON.parse(
+    await documentSettings.getByLabel('Color names and hex values').inputValue(),
+  );
+  expect(secondColors.brand).toBe('#0f766e');
+  secondColors.brand = '#0000ff';
+  await documentSettings
+    .getByLabel('Color names and hex values')
+    .fill(JSON.stringify(secondColors));
   await documentSettings.getByLabel('Additional classes').fill('block');
   await documentSettings.getByRole('button', { name: 'Save settings', exact: true }).click();
   await page.locator('#document-list button').filter({ hasText: 'Welcome.html' }).click();
@@ -534,6 +561,9 @@ test('document settings stay with each document and separate from workspace pref
     documentSettings.getByLabel('Include Tailwind base styles (Preflight)'),
   ).not.toBeChecked();
   await expect(documentSettings.getByLabel('Additional classes')).toHaveValue('hidden');
+  expect(
+    JSON.parse(await documentSettings.getByLabel('Color names and hex values').inputValue()).brand,
+  ).toBe('#ff0000');
   await page.screenshot({ path: 'test-results/document-settings-desktop.png', fullPage: true });
   await documentSettings.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -542,6 +572,9 @@ test('document settings stay with each document and separate from workspace pref
   await page.locator('#document-list button').filter({ hasText: 'Second.html' }).click();
   await gear.click();
   await expect(documentSettings.getByLabel('Additional classes')).toHaveValue('block');
+  expect(
+    JSON.parse(await documentSettings.getByLabel('Color names and hex values').inputValue()).brand,
+  ).toBe('#0000ff');
   await documentSettings.getByRole('button', { name: 'Close', exact: true }).click();
 
   await page.setViewportSize({ width: 390, height: 844 });

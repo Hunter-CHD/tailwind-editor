@@ -70,10 +70,10 @@ The live preview and popout run in sandboxed iframes without access to the edito
 
 ## Color themes
 
-**Themes** has two independent sections:
+Use **Themes** for editor appearance and **Document settings** for the current document's palette:
 
 - **Editor appearance:** Paper, Midnight, Sand, or a saved custom background, surface, text, and accent. The selected colors also apply to Monaco.
-- **Document colors:** a JSON map of lowercase names to six-digit hex colors. Each document has its own map, used by preview and export.
+- **Document colors:** a JSON map of lowercase names to six-digit hex colors in **Document settings**, opened with the toolbar gear. Each document has its own map, used by preview and export. **Save settings** applies colors, Preflight, and additional classes together.
 
 ```json
 {

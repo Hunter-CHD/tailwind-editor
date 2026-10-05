@@ -449,7 +449,6 @@ export async function start() {
     },
     themes: () => {
       renderThemes();
-      $('#palette-json').value = JSON.stringify(activeDocument().colors, null, 2);
       $('#theme-dialog').showModal();
     },
     settings: () => {
@@ -463,6 +462,7 @@ export async function start() {
       $('#document-settings-name').textContent = activeDocument().name;
       $('#preflight').checked = activeDocument().preflight;
       $('#safelist').value = activeDocument().safelist;
+      $('#palette-json').value = JSON.stringify(activeDocument().colors, null, 2);
       $('#document-settings-dialog').showModal();
     },
     transformations: () => {
@@ -547,20 +547,6 @@ export async function start() {
     renderThemes();
     notify('Custom editor theme saved.');
   });
-  $('#palette-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-    try {
-      const colors = JSON.parse($('#palette-json').value);
-      if (!colors || Array.isArray(colors) || typeof colors !== 'object')
-        throw new Error('Colors must be a JSON object.');
-      activeDocument().colors = validateColors(colors);
-      save();
-      refresh();
-      notify('Document colors applied.');
-    } catch (error) {
-      notify(error.message);
-    }
-  });
   $('#settings-form').addEventListener('submit', (event) => {
     event.preventDefault();
     workspace.settings.fontSize = Number($('#font-size').value);
@@ -571,11 +557,20 @@ export async function start() {
   });
   $('#document-settings-form').addEventListener('submit', (event) => {
     event.preventDefault();
-    activeDocument().preflight = $('#preflight').checked;
-    activeDocument().safelist = $('#safelist').value;
-    save();
-    refresh();
-    $('#document-settings-dialog').close();
+    try {
+      const colors = JSON.parse($('#palette-json').value);
+      if (!colors || Array.isArray(colors) || typeof colors !== 'object')
+        throw new Error('Colors must be a JSON object.');
+      const validatedColors = validateColors(colors);
+      activeDocument().colors = validatedColors;
+      activeDocument().preflight = $('#preflight').checked;
+      activeDocument().safelist = $('#safelist').value;
+      save();
+      refresh();
+      $('#document-settings-dialog').close();
+    } catch (error) {
+      notify(error.message);
+    }
   });
   $('#file-input').addEventListener('change', async (event) => {
     const file = event.target.files[0];
