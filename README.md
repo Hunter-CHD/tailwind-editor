@@ -48,7 +48,7 @@ index.html                       Entry point and pinned import map
 preview.html                     Dedicated popout page with a minimal CSS reset
 ```
 
-The controller owns one plain workspace object. User actions change it, save it, and request a preview. The model persists a snapshot in an IndexedDB transaction through [idb-keyval](https://github.com/jakearchibald/idb-keyval). There is no service container, routing layer, generated source, or custom event system. Native dialogs, downloads, clipboard, and pointer events cover the small browser interactions.
+The controller owns one plain workspace object. User actions change it, save it, and request a preview. The model splits each saved snapshot into HTML files, document metadata linked by ID, individual transformations, and workspace metadata, then commits only changed records through native IndexedDB transactions. There is no service container, routing layer, generated source, or custom event system. Native dialogs, downloads, clipboard, and pointer events cover the small browser interactions.
 
 ## Editing and export
 
@@ -131,13 +131,26 @@ An example export-only cleanup is provided when adding a transform. It removes `
 
 ## Storage and migration
 
-Documents, active selection, colors, editor settings, and transformations are stored in the `tailwind-editor` IndexedDB database, `workspaces` store, `workspace` key. Short debounced saves are serialized and acknowledged only after the transaction succeeds. The app shows errors instead of claiming data was saved if storage is unavailable or full. Use **Settings → Download backup** to keep a portable, readable JSON copy. Browser storage can be cleared or evicted; it is not a substitute for a backup.
+The `tailwind-editor` IndexedDB database uses schema version 3 with four object stores:
 
-On first use, the model looks for the reference app's `twind-editor-tabs`, `twind-editor-active-tab`, and `twind-editor-transformations` localStorage keys. It copies them into IndexedDB and leaves the originals untouched. This only works on the **same origin**, including protocol, hostname, and port. New data is never written to localStorage. If hosting changes, open the old app on its original origin and export the HTML/transformation files for import, or migrate on that origin first and use a workspace backup.
+| Store              | Key               | Contents                                                                         |
+| ------------------ | ----------------- | -------------------------------------------------------------------------------- |
+| `documentFiles`    | Document ID       | An HTML `File` and a content hash used to detect changes                         |
+| `documentMetadata` | Same document ID  | Name, colors, Preflight, and additional classes                                  |
+| `transformations`  | Transformation ID | Name, code, input type, stage, trigger, and enabled state                        |
+| `workspaces`       | `workspace`       | Ordered document and transformation IDs, active document ID, and editor settings |
+
+Each document's file and metadata are linked by ID. Editing HTML writes only that document's file; changing its settings writes only its metadata. Renaming updates the file's name and metadata together. Deleted documents have both records removed. Each transformation has its own ID-keyed record; editing its code or options updates only that record, while reordering changes the ordered IDs in workspace metadata. Removing a transformation deletes its record. Short debounced saves are serialized, update only changed records, and commit across all four stores in one transaction. The app acknowledges a save only after the transaction succeeds and reports errors if storage is unavailable or full. Files remain in browser storage; they are not files on your computer's filesystem.
+
+Existing single-record IndexedDB workspaces and schema 2 workspaces with inline transformations migrate automatically, preserving IDs, order, settings, and enabled transformations. The old workspace record is replaced only when all new records commit successfully. **Settings → Download backup** still produces a portable JSON workspace, and existing JSON backups remain compatible. Browser storage can be cleared or evicted; it is not a substitute for a backup.
+
+If saved data cannot be loaded or migrated, the temporary workspace stays unsaved so editing it cannot overwrite the stored originals. Reload after resolving the storage error, or explicitly restore a backup from Settings.
+
+All persistence uses IndexedDB. A new installation starts with the default workspace. Use a JSON workspace backup to transfer saved data to another origin or hosting location.
 
 ## Dependencies and development
 
-Runtime libraries are pinned: Monaco 0.45.0, [emmet-monaco-es 5.7.0](https://github.com/troy351/emmet-monaco-es), Twind core 1.1.3, Tailwind preset 1.1.4, Autoprefix preset 1.0.7, idb-keyval 6.2.1, [Prettier 3.5.3](https://prettier.io/docs/browser), and LinkeDOM 0.18.9. Monaco and the worker/formatter load only when needed; an editor-load failure leaves a plain textarea available when the rest of the app can initialize. An Emmet-load failure leaves Monaco available with its standard completions. Emmet supports HTML abbreviations; embedded CSS abbreviations inside `<style>` blocks are not supported by this integration.
+Runtime libraries are pinned: Monaco 0.45.0, [emmet-monaco-es 5.7.0](https://github.com/troy351/emmet-monaco-es), Twind core 1.1.3, Tailwind preset 1.1.4, Autoprefix preset 1.0.7, [Prettier 3.5.3](https://prettier.io/docs/browser), and LinkeDOM 0.18.9. Storage uses the browser's native IndexedDB API. Monaco and the worker/formatter load only when needed; an editor-load failure leaves a plain textarea available when the rest of the app can initialize. An Emmet-load failure leaves Monaco available with its standard completions. Emmet supports HTML abbreviations; embedded CSS abbreviations inside `<style>` blocks are not supported by this integration.
 
 ```sh
 npm ci

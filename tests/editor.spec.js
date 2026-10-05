@@ -255,7 +255,6 @@ test('loads the editor, renders styles, and persists source in IndexedDB', async
   await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.reload();
   await expect(page.frameLocator('#preview').locator('h1')).toHaveText('Persisted document');
-  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
   expect(errors).toEqual([]);
 });
 
@@ -467,40 +466,6 @@ test('document colors and a custom interface theme persist', async ({ page }) =>
   await expect(page.frameLocator('#preview').locator('h1 span')).toHaveCSS(
     'color',
     'rgb(255, 0, 0)',
-  );
-});
-
-test('migrates legacy storage once without deleting it or enabling imported code', async ({
-  page,
-}) => {
-  await page.goto('./');
-  await page.evaluate(async () => {
-    const { createStore, del } = await import('idb-keyval');
-    await del('workspace', createStore('tailwind-editor', 'workspaces'));
-    localStorage.setItem(
-      'twind-editor-tabs',
-      JSON.stringify([{ id: 'legacy', name: 'Legacy', content: '<p>Legacy work</p>' }]),
-    );
-    localStorage.setItem('twind-editor-active-tab', JSON.stringify('legacy'));
-    localStorage.setItem(
-      'twind-editor-transformations',
-      JSON.stringify([
-        {
-          name: 'Old transform',
-          code: 'return code;',
-          mode: 'auto',
-          target: 'preview',
-          enabled: true,
-        },
-      ]),
-    );
-  });
-  await page.reload();
-  await expect(page.frameLocator('#preview').locator('p')).toHaveText('Legacy work');
-  await page.getByRole('button', { name: /Transformations/ }).click();
-  await expect(page.getByRole('checkbox', { name: 'Enable transformation' })).not.toBeChecked();
-  expect(await page.evaluate(() => localStorage.getItem('twind-editor-tabs'))).toContain(
-    'Legacy work',
   );
 });
 

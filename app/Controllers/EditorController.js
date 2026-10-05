@@ -21,6 +21,7 @@ export async function start() {
   let saveChain = Promise.resolve();
   let saveRevision = 0;
   let savedRevision = 0;
+  let storageReady = false;
   let renderRevision = 0;
   let pendingEditorTransforms = false;
   let exportResult;
@@ -45,17 +46,14 @@ export async function start() {
   try {
     const loaded = await loadWorkspace();
     workspace = loaded.workspace;
+    storageReady = true;
     $('#save-status').textContent = 'All changes saved';
-    if (loaded.migrated)
-      notify(
-        'Previous documents imported. Your old data is untouched; imported transformations are disabled for review.',
-      );
   } catch (error) {
     workspace = newWorkspace();
     $('#save-status').textContent = 'Storage unavailable';
     $('#save-status').dataset.error = 'true';
     notify(
-      `IndexedDB could not be opened. Use a workspace backup to keep your work. ${error.message}`,
+      `Saved workspace could not be loaded. Use a workspace backup to keep your work. ${error.message}`,
     );
   }
 
@@ -80,6 +78,11 @@ export async function start() {
 
   function save() {
     saveRevision++;
+    if (!storageReady) {
+      $('#save-status').textContent = 'Not saved · download a backup';
+      $('#save-status').dataset.error = 'true';
+      return;
+    }
     $('#save-status').textContent = 'Saving…';
     $('#save-status').dataset.error = 'false';
     clearTimeout(saveTimer);
@@ -88,6 +91,8 @@ export async function start() {
 
   function persist() {
     clearTimeout(saveTimer);
+    // A temporary workspace must not overwrite data that failed to load or migrate.
+    if (!storageReady) return Promise.resolve();
     const revision = saveRevision;
     const snapshot = structuredClone(workspace);
     saveChain = saveChain
@@ -485,6 +490,7 @@ export async function start() {
           item.enabled = false;
         });
         Object.assign(workspace, restored);
+        storageReady = true;
         applySidebarState();
         openDocument(workspace.activeId);
         transformations.render();
