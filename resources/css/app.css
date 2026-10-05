@@ -376,7 +376,7 @@ hr {
   font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.4px;
-  max-width: 35vw;
+  max-width: min(35vw, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
@@ -385,6 +385,7 @@ hr {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 .toolbar-actions > button {
   font-size: 11px;
