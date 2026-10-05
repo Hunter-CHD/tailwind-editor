@@ -135,7 +135,7 @@ export async function start() {
       pendingEditorTransforms = false;
       if (document.content !== activeDocument().content) {
         activeDocument().content = document.content;
-        editor.setValue(document.content);
+        editor.setValue(document.content, { preserveView: true });
         save();
       }
     }
@@ -450,11 +450,15 @@ export async function start() {
     settings: () => {
       $('#font-size').value = workspace.settings.fontSize;
       $('#word-wrap').checked = workspace.settings.wordWrap;
-      $('#preflight').checked = activeDocument().preflight;
-      $('#safelist').value = activeDocument().safelist;
       $('#storage-size').textContent =
         `${workspace.documents.length} documents · ${size(JSON.stringify(workspace))} workspace data · IndexedDB`;
       $('#settings-dialog').showModal();
+    },
+    'document-settings': () => {
+      $('#document-settings-name').textContent = activeDocument().name;
+      $('#preflight').checked = activeDocument().preflight;
+      $('#safelist').value = activeDocument().safelist;
+      $('#document-settings-dialog').showModal();
     },
     transformations: () => {
       transformations.render();
@@ -555,12 +559,17 @@ export async function start() {
     event.preventDefault();
     workspace.settings.fontSize = Number($('#font-size').value);
     workspace.settings.wordWrap = $('#word-wrap').checked;
+    save();
+    applyTheme();
+    $('#settings-dialog').close();
+  });
+  $('#document-settings-form').addEventListener('submit', (event) => {
+    event.preventDefault();
     activeDocument().preflight = $('#preflight').checked;
     activeDocument().safelist = $('#safelist').value;
     save();
-    applyTheme();
     refresh();
-    $('#settings-dialog').close();
+    $('#document-settings-dialog').close();
   });
   $('#file-input').addEventListener('change', async (event) => {
     const file = event.target.files[0];

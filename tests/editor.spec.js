@@ -11,6 +11,150 @@ async function setSource(page, source) {
   await expect(page.locator('#compile-status')).toContainText('Live preview');
 }
 
+async function configureEditorTransform(page, mode) {
+  await page.evaluate(async (mode) => {
+    const { loadWorkspace, saveWorkspace } = await import('./app/Models/Workspace.js');
+    const { workspace } = await loadWorkspace();
+    workspace.settings.wordWrap = false;
+    workspace.transformations = [
+      {
+        id: 'cursor-test',
+        name: 'Preserve editing position',
+        kind: 'string',
+        enabled: true,
+        mode,
+        target: 'editor',
+        code: 'await new Promise(resolve => setTimeout(resolve, 700)); return code.replace("Before", "After");',
+      },
+    ];
+    await saveWorkspace(workspace);
+  }, mode);
+  await page.reload();
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+}
+
+for (const mode of ['auto', 'manual']) {
+  test(`${mode} editor transforms preserve the latest selections and scroll position`, async ({
+    page,
+  }) => {
+    await openEditor(page);
+    await configureEditorTransform(page, mode);
+    const source = Array.from(
+      { length: 120 },
+      (_, i) => `<p>Before ${i} ${'x'.repeat(200)}</p>`,
+    ).join('\n');
+    const workerStarted = page.waitForEvent('worker', {
+      predicate: (worker) => worker.url().endsWith('TransformationWorker.js'),
+    });
+    await page.evaluate((value) => window.monaco.editor.getModels()[0].setValue(value), source);
+    if (mode === 'manual') {
+      await page.getByRole('button', { name: 'Transformations', exact: true }).click();
+      await page.getByRole('button', { name: 'Run once', exact: true }).click();
+    }
+    await workerStarted;
+    // The user can move the cursor while the asynchronous transform is running.
+    const before = await page.evaluate(() => {
+      const editor = window.monaco.editor.getEditors()[0];
+      editor.setSelections([
+        new window.monaco.Selection(60, 45, 60, 35),
+        new window.monaco.Selection(70, 40, 70, 40),
+      ]);
+      editor.setScrollPosition({ scrollTop: 1100, scrollLeft: 200 });
+      if (!document.querySelector('dialog[open]')) editor.focus();
+      return {
+        selections: editor.getSelections(),
+        top: editor.getScrollTop(),
+        left: editor.getScrollLeft(),
+      };
+    });
+    expect(before.top).toBeGreaterThan(0);
+    expect(before.left).toBeGreaterThan(0);
+    await page.waitForFunction(() =>
+      window.monaco.editor.getModels()[0].getValue().includes('After'),
+    );
+    await expect(page.locator('#compile-status')).toContainText('Live preview');
+    const after = await page.evaluate(() => {
+      const editor = window.monaco.editor.getEditors()[0];
+      return {
+        selections: editor.getSelections(),
+        top: editor.getScrollTop(),
+        left: editor.getScrollLeft(),
+      };
+    });
+    expect(after).toEqual(before);
+    if (mode === 'auto') {
+      expect(await page.evaluate(() => window.monaco.editor.getEditors()[0].hasTextFocus())).toBe(
+        true,
+      );
+    } else {
+      await page.locator('#transform-dialog [data-close]').click();
+      await page.evaluate(() => window.monaco.editor.getEditors()[0].trigger('test', 'undo'));
+      expect(await page.evaluate(() => window.monaco.editor.getModels()[0].getValue())).toBe(
+        source,
+      );
+      await page.evaluate(() => window.monaco.editor.getEditors()[0].trigger('test', 'redo'));
+      expect(
+        await page.evaluate(() => window.monaco.editor.getEditors()[0].getSelections()),
+      ).toEqual(before.selections);
+      await page.getByRole('button', { name: 'Transformations', exact: true }).click();
+      await page
+        .getByRole('textbox', { name: 'Transformation code', exact: true })
+        .fill('return "<p>x</p>";');
+      await page.getByRole('button', { name: 'Run once', exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.monaco.editor.getModels()[0].getValue()))
+        .toBe('<p>x</p>');
+      expect(await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition())).toEqual(
+        {
+          lineNumber: 1,
+          column: 9,
+        },
+      );
+      expect(await page.evaluate(() => window.monaco.editor.getEditors()[0].getScrollTop())).toBe(
+        0,
+      );
+    }
+  });
+}
+
+test('plain-text automatic transforms preserve selection direction and scrolling', async ({
+  page,
+}) => {
+  await page.route('**/monaco-editor@0.45.0/min/vs/loader.js', (route) => route.abort());
+  await page.goto('./');
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+  await configureEditorTransform(page, 'auto');
+  const input = page.getByRole('textbox', { name: 'HTML source', exact: true });
+  const source = Array.from({ length: 120 }, () => `<p>Before ${'x'.repeat(200)}</p>`).join('\n');
+  const workerStarted = page.waitForEvent('worker', {
+    predicate: (worker) => worker.url().endsWith('TransformationWorker.js'),
+  });
+  await input.fill(source);
+  await workerStarted;
+  const before = await input.evaluate((input) => {
+    input.setSelectionRange(6000, 6010, 'backward');
+    input.scrollTop = 400;
+    input.scrollLeft = 200;
+    return [
+      input.selectionStart,
+      input.selectionEnd,
+      input.selectionDirection,
+      input.scrollTop,
+      input.scrollLeft,
+    ];
+  });
+  await expect(input).toHaveValue(source.replace('Before', 'After'));
+  expect(
+    await input.evaluate((input) => [
+      input.selectionStart,
+      input.selectionEnd,
+      input.selectionDirection,
+      input.scrollTop,
+      input.scrollLeft,
+    ]),
+  ).toEqual(before);
+});
+
 async function openPopout(page) {
   const opened = page.waitForEvent('popup');
   await page.getByRole('button', { name: 'Open preview in a new tab', exact: true }).click();
@@ -366,14 +510,80 @@ test('formats HTML and manages separate documents', async ({ page }) => {
   await page.locator('#name-input').fill('Second');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await setSource(page, '<section><h1>Hello</h1><p>Second document</p></section>');
+  await page.evaluate(() =>
+    window.monaco.editor.getEditors()[0].setPosition({ lineNumber: 1, column: 3 }),
+  );
   await page.getByRole('button', { name: /Format/ }).click();
   await expect
     .poll(() => page.evaluate(() => window.monaco.editor.getModels()[0].getValue()))
     .toContain('\n');
+  expect(await page.evaluate(() => window.monaco.editor.getEditors()[0].getPosition())).toEqual({
+    lineNumber: 1,
+    column: 3,
+  });
   await page.getByRole('button', { name: '◇ Welcome.html', exact: true }).click();
   await expect(page.frameLocator('#preview').locator('h1')).toContainText('Start with an idea.');
   await page.getByRole('button', { name: '◇ Second.html', exact: true }).click();
   await expect(page.frameLocator('#preview').locator('h1')).toHaveText('Hello');
+});
+
+test('document settings stay with each document and separate from workspace preferences', async ({
+  page,
+}) => {
+  await openEditor(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const workspaceSettings = page.locator('#settings-dialog');
+  await expect(
+    workspaceSettings.getByLabel('Include Tailwind base styles (Preflight)'),
+  ).toHaveCount(0);
+  await expect(workspaceSettings.getByLabel('Additional classes')).toHaveCount(0);
+  await workspaceSettings.getByLabel('Editor font size').fill('16');
+  await workspaceSettings.getByRole('button', { name: 'Save settings', exact: true }).click();
+
+  const gear = page.getByRole('button', { name: 'Document settings', exact: true });
+  const documentSettings = page.getByRole('dialog', { name: 'Document settings', exact: true });
+  await gear.click();
+  await expect(documentSettings.locator('#document-settings-name')).toHaveText('Welcome.html');
+  await documentSettings.getByLabel('Include Tailwind base styles (Preflight)').uncheck();
+  await documentSettings.getByLabel('Additional classes').fill('hidden');
+  await documentSettings.getByRole('button', { name: 'Save settings', exact: true }).click();
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+
+  await page.getByRole('button', { name: 'New document', exact: true }).click();
+  await page.locator('#name-input').fill('Second');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await gear.click();
+  await expect(documentSettings.locator('#document-settings-name')).toHaveText('Second.html');
+  await expect(
+    documentSettings.getByLabel('Include Tailwind base styles (Preflight)'),
+  ).toBeChecked();
+  await expect(documentSettings.getByLabel('Additional classes')).toHaveValue('');
+  await documentSettings.getByLabel('Additional classes').fill('block');
+  await documentSettings.getByRole('button', { name: 'Save settings', exact: true }).click();
+  await page.locator('#document-list button').filter({ hasText: 'Welcome.html' }).click();
+  await expect(page.locator('#save-status')).toHaveText('All changes saved');
+  await page.reload();
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+  await gear.click();
+  await expect(
+    documentSettings.getByLabel('Include Tailwind base styles (Preflight)'),
+  ).not.toBeChecked();
+  await expect(documentSettings.getByLabel('Additional classes')).toHaveValue('hidden');
+  await page.screenshot({ path: 'test-results/document-settings-desktop.png', fullPage: true });
+  await documentSettings.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(workspaceSettings.getByLabel('Editor font size')).toHaveValue('16');
+  await workspaceSettings.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('#document-list button').filter({ hasText: 'Second.html' }).click();
+  await gear.click();
+  await expect(documentSettings.getByLabel('Additional classes')).toHaveValue('block');
+  await documentSettings.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await gear.click();
+  await expect(documentSettings).toBeVisible();
+  await page.screenshot({ path: 'test-results/document-settings-mobile.png', fullPage: true });
 });
 
 test('desktop and mobile layouts remain usable', async ({ page }) => {

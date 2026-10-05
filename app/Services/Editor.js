@@ -49,20 +49,37 @@ export async function createEditor(container, settings, onChange) {
     editor.onDidChangeModelContent(() => {
       if (!replacing) onChange(editor.getValue());
     });
+    function preserveView(update) {
+      const viewState = editor.saveViewState();
+      try {
+        update();
+      } finally {
+        editor.restoreViewState(viewState);
+      }
+    }
     return {
       getValue: () => editor.getValue(),
-      setValue(value) {
+      setValue(value, { preserveView: keepView = false } = {}) {
         if (value === editor.getValue()) return;
         replacing = true;
-        editor.setValue(value);
-        replacing = false;
+        try {
+          if (keepView) preserveView(() => editor.setValue(value));
+          else editor.setValue(value);
+        } finally {
+          replacing = false;
+        }
       },
       replace(value) {
-        editor.pushUndoStop();
-        editor.executeEdits('replace', [
-          { range: editor.getModel().getFullModelRange(), text: value },
-        ]);
-        editor.pushUndoStop();
+        if (value === editor.getValue()) return;
+        preserveView(() => {
+          editor.pushUndoStop();
+          editor.executeEdits(
+            'replace',
+            [{ range: editor.getModel().getFullModelRange(), text: value }],
+            editor.getSelections(),
+          );
+          editor.pushUndoStop();
+        });
       },
       configure(theme, options) {
         window.monaco.editor.defineTheme('workspace', {
@@ -91,14 +108,22 @@ export async function createEditor(container, settings, onChange) {
     input.spellcheck = false;
     container.replaceChildren(input);
     input.addEventListener('input', () => onChange(input.value));
+    function setValue(value, { preserveView = false } = {}) {
+      if (value === input.value) return;
+      const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = input;
+      input.value = value;
+      if (preserveView) {
+        input.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+        input.scrollTop = scrollTop;
+        input.scrollLeft = scrollLeft;
+      }
+    }
     return {
       fallback: true,
       getValue: () => input.value,
-      setValue: (value) => {
-        input.value = value;
-      },
+      setValue,
       replace: (value) => {
-        input.value = value;
+        setValue(value, { preserveView: true });
         onChange(value);
       },
       configure: (_theme, options) => {
