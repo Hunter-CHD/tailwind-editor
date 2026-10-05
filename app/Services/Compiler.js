@@ -61,6 +61,12 @@ function compileSource(document, content) {
     style.dataset.generated = 'tailwind-editor';
     style.textContent = safeCss;
     parsed.head.append(style);
+    // Reset the preview frame without adding rules to generated/exported CSS.
+    // Authored styles and utilities can still override this baseline.
+    const previewReset = parsed.createElement('style');
+    previewReset.dataset.preview = 'document-reset';
+    previewReset.textContent = 'html, body { margin: 0; padding: 0; }';
+    parsed.head.prepend(previewReset);
     const classes = new Set(
       [...parsed.querySelectorAll('[class]')].flatMap((element) => [...element.classList]),
     );

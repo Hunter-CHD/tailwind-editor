@@ -34,6 +34,8 @@ app/
   Services/
     Compiler.js                  Preview document and CSS + HTML fragment export
     Editor.js                    Monaco and Prettier integration
+    Html.js                      HTML readiness and active editing region checks
+    HtmlWorker.js                HTML parsing away from the editor thread
     Transformations.js           Worker lifecycle and timeout
     TransformationWorker.js      Shared DOM/string pipeline
 config/
@@ -68,6 +70,8 @@ This intentionally retains the reference app's Twind 1 / Tailwind 3-style utilit
 
 The live preview and popout run in sandboxed iframes without access to the editor's origin. Scripts in authored HTML may run in that preview, but cannot read the workspace's IndexedDB. Links, images, and other remote assets may still make requests. The popout opens `preview.html`, with explicit sizing and reset styles for its outer page, instead of `about:blank`. It has no editor styles or UI. A session-specific BroadcastChannel sends the same rendered output, including edits, document switches, document colors, and preview transformations. Reloading the popout requests the latest preview again. Export-only transformations stay out of both previews. If rendering fails, both keep the last successful preview. Reloading or closing the editor ends that popout connection; open a new popout from the new editor session. The outer reset does not change your fragment's styles; Tailwind Preflight remains controlled by document settings.
 
+Preview documents apply a separate `html, body { margin: 0; padding: 0; }` baseline in both the inline preview and popout iframe. Authored styles and utilities can override it. This preview reset is excluded from generated CSS and exported HTML.
+
 ## Color themes
 
 Use **Themes** for editor appearance and **Document settings** for the current document's palette:
@@ -91,13 +95,17 @@ Each transformation has a name, input type, stage, enabled flag, and automatic/m
 
 | Stage            | When it runs                                                                   | What it changes      |
 | ---------------- | ------------------------------------------------------------------------------ | -------------------- |
-| Editor           | Once after a source edit settles, or Run once                                  | Saved source         |
+| Editor           | After a safe line change or editor blur, or Run once                           | Saved source         |
 | Preview + export | On preview and export if automatic; Run once for a temporary preview if manual | Output only          |
 | Export only      | Enabled transforms run when Export opens, regardless of trigger                | Export snapshot only |
 
 New transforms start disabled. Imported transformations also start disabled, including those in a restored workspace, so importing JavaScript does not execute it immediately. Enabling an automatic editor transform affects the next source edit; Run once applies it immediately.
 
-Editor transformations and formatting preserve cursor selections and scroll position. Positions are restored at the same line and column (character offsets in the plain-text fallback), clamped to the new content when it becomes shorter.
+The source toolbar reports **HTML ready**, **HTML incomplete**, or **HTML syntax error**. Hover over the status for the reason and line number. Unfinished quotes, attributes, comments, and required closing tags pause all transformations and keep the last successful preview. Your unfinished source still saves to IndexedDB. The check accepts HTML fragments, void elements, optional end tags, custom elements and attributes, and SVG; it checks editing readiness rather than complete HTML conformance or accessibility.
+
+Automatic preview transformations resume as soon as the source is ready. Automatic editor transformations wait for a cursor line change or editor blur while focused. Before applying, they protect every selected line and the entire opening tag around a selection, including attributes on other lines. Changes that overlap those regions wait for another boundary or blur. A conservative change range may also defer several distant edits until blur. If the source changes during an asynchronous run, its result is discarded. Invalid transformation output cannot replace the source or preview.
+
+Automatic editor transformations preserve scroll position and track selections through edits before the cursor, including inserted or removed lines. Manual transformations and formatting restore the same line and column (character offsets in the plain-text fallback), clamped when content becomes shorter. **Run once** and export require ready HTML too.
 
 ### Shared DOM input (recommended)
 
@@ -150,7 +158,7 @@ All persistence uses IndexedDB. A new installation starts with the default works
 
 ## Dependencies and development
 
-Runtime libraries are pinned: Monaco 0.45.0, [emmet-monaco-es 5.7.0](https://github.com/troy351/emmet-monaco-es), Twind core 1.1.3, Tailwind preset 1.1.4, Autoprefix preset 1.0.7, [Prettier 3.5.3](https://prettier.io/docs/browser), and LinkeDOM 0.18.9. Storage uses the browser's native IndexedDB API. Monaco and the worker/formatter load only when needed; an editor-load failure leaves a plain textarea available when the rest of the app can initialize. An Emmet-load failure leaves Monaco available with its standard completions. Emmet supports HTML abbreviations; embedded CSS abbreviations inside `<style>` blocks are not supported by this integration.
+Runtime libraries are pinned: Monaco 0.45.0, [emmet-monaco-es 5.7.0](https://github.com/troy351/emmet-monaco-es), Twind core 1.1.3, Tailwind preset 1.1.4, Autoprefix preset 1.0.7, [Prettier 3.5.3](https://prettier.io/docs/browser), LinkeDOM 0.18.9, and [parse5 8.0.1](https://github.com/inikulin/parse5). HTML readiness checks run in a reusable worker; if the check cannot load, transformations pause while source saving continues. Storage uses the browser's native IndexedDB API. Monaco and the worker/formatter load only when needed; an editor-load failure leaves a plain textarea available when the rest of the app can initialize. An Emmet-load failure leaves Monaco available with its standard completions. Emmet supports HTML abbreviations; embedded CSS abbreviations inside `<style>` blocks are not supported by this integration.
 
 ```sh
 npm ci

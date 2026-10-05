@@ -292,8 +292,8 @@ hr {
   padding: 12px 8px;
   font-size: 12px;
 }
-.sidebar-bottom > button > .icon{
-  width:2ch;
+.sidebar-bottom > button > .icon {
+  width: 2ch;
 }
 .count {
   margin-left: auto;
@@ -390,8 +390,8 @@ hr {
 .toolbar-actions > button {
   font-size: 11px;
 }
-.toolbar-actions > button.icon-button{
-  font-size:19px;
+.toolbar-actions > button.icon-button {
+  font-size: 19px;
 }
 .split-workspace {
   flex: 1;
@@ -433,6 +433,12 @@ hr {
 .code-icon {
   color: var(--muted);
   font-family: monospace;
+}
+#html-status[data-state='incomplete'] {
+  color: #9a6700;
+}
+#html-status[data-state='invalid'] {
+  color: #d34b4b;
 }
 .subtle {
   color: var(--muted);

@@ -8,6 +8,7 @@ import {
 import { compile, compileExport } from '../Services/Compiler.js';
 import { createEditor, formatHtml } from '../Services/Editor.js';
 import { runTransformations } from '../Services/Transformations.js';
+import { inspectHtml, affectsEditingRegion } from '../Services/Html.js';
 import { bindTransformations } from './TransformationController.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -24,6 +25,9 @@ export async function start() {
   let storageReady = false;
   let renderRevision = 0;
   let pendingEditorTransforms = false;
+  let editingBoundary = false;
+  let inspectedSource;
+  let inspection;
   let exportResult;
   let exportName;
   let nameAction;
@@ -62,10 +66,54 @@ export async function start() {
   const editor = await createEditor($('#editor'), workspace.settings, (content) => {
     activeDocument().content = content;
     pendingEditorTransforms = true;
+    editingBoundary = false;
     save();
     refresh();
   });
   if (editor.fallback) notify('The code editor could not load. Plain-text editing is available.');
+  editor.onEditingBoundary((reason) => {
+    editingBoundary = true;
+    if (pendingEditorTransforms && (hasAutomaticEditorTransforms() || reason === 'compositionend'))
+      refresh();
+  });
+
+  function hasAutomaticEditorTransforms() {
+    return workspace.transformations.some(
+      (item) => item.enabled && item.mode === 'auto' && item.target === 'editor',
+    );
+  }
+
+  function inspect(source) {
+    if (source !== inspectedSource) {
+      inspectedSource = source;
+      inspection = inspectHtml(source);
+      // Permit a retry after a failed worker/CDN load.
+      inspection.catch(() => {
+        if (inspectedSource === source) inspectedSource = undefined;
+      });
+    }
+    return inspection;
+  }
+
+  function showHtmlStatus(result) {
+    const status = $('#html-status');
+    status.dataset.state = result.state;
+    status.textContent = {
+      ready: 'HTML ready',
+      incomplete: 'HTML incomplete',
+      invalid: 'HTML syntax error',
+    }[result.state];
+    status.title = result.reason || 'HTML syntax is ready for transformations.';
+    if (result.state !== 'ready')
+      $('#compile-status').textContent = `Transforms paused · ${result.reason}`;
+  }
+
+  async function requireReady(source) {
+    const result = await inspect(source);
+    if (source === editor.getValue()) showHtmlStatus(result);
+    if (result.state !== 'ready') throw new Error(`Transforms paused · ${result.reason}`);
+    return result;
+  }
 
   function notify(message) {
     clearTimeout(noticeTimer);
@@ -114,10 +162,23 @@ export async function start() {
     renderRevision++;
     clearTimeout(renderTimer);
     $('#compile-status').textContent = 'Updating preview…';
-    renderTimer = setTimeout(() => render().catch(reportError), 350);
+    $('#html-status').textContent = 'Checking HTML…';
+    $('#html-status').dataset.state = 'checking';
+    renderTimer = setTimeout(() => {
+      const result = render();
+      const revision = renderRevision;
+      result.catch((error) => {
+        if (revision === renderRevision) reportError(error);
+      });
+    }, 350);
   }
 
   function reportError(error) {
+    if (error.message.startsWith('HTML syntax check')) {
+      $('#html-status').textContent = 'HTML check unavailable';
+      $('#html-status').dataset.state = 'invalid';
+      $('#html-status').title = error.message;
+    }
     $('#compile-status').textContent = 'Preview not updated · transformation or compilation error';
     $('#transform-log').textContent = error.message;
     notify(error.message);
@@ -129,18 +190,35 @@ export async function start() {
     return result.code;
   }
 
-  async function applyPendingEditorTransforms(document, revision) {
-    const shouldApplyEditor = pendingEditorTransforms;
+  async function applyPendingEditorTransforms(document, revision, syntax) {
+    const state = editor.getEditingState();
+    const shouldApplyEditor =
+      pendingEditorTransforms && !state.composing && (!state.focused || editingBoundary);
     if (shouldApplyEditor) {
       const transforms = workspace.transformations.filter(
         (item) => item.enabled && item.mode === 'auto' && item.target === 'editor',
       );
-      document.content = await transform(document.content, transforms, 'editor', document.name);
+      const source = document.content;
+      const result = await transform(source, transforms, 'editor', document.name);
       if (revision !== renderRevision) return false;
+      const valid = result === source ? syntax : await inspectHtml(result);
+      if (revision !== renderRevision) return false;
+      if (valid.state !== 'ready')
+        throw new Error(`Editor transformation produced unsafe HTML · ${valid.reason}`);
+      const current = editor.getEditingState();
+      if (
+        current.composing ||
+        (current.focused &&
+          (!editingBoundary ||
+            affectsEditingRegion(source, result, current.selections, syntax.openingTags)))
+      )
+        return true;
       pendingEditorTransforms = false;
-      if (document.content !== activeDocument().content) {
-        activeDocument().content = document.content;
-        editor.setValue(document.content, { preserveView: true });
+      document.content = result;
+      if (result !== activeDocument().content) {
+        activeDocument().content = result;
+        editor.applyTransformation(result);
+        showHtmlStatus(valid);
         save();
       }
     }
@@ -151,7 +229,15 @@ export async function start() {
     clearTimeout(renderTimer);
     const revision = ++renderRevision;
     const document = structuredClone(activeDocument());
-    if (!(await applyPendingEditorTransforms(document, revision))) return;
+    const syntax = await inspect(document.content);
+    if (revision !== renderRevision) return;
+    showHtmlStatus(syntax);
+    if (syntax.state !== 'ready') return;
+    if (editor.getEditingState().composing) {
+      $('#compile-status').textContent = 'Transforms paused · Finish composing text';
+      return;
+    }
+    if (!(await applyPendingEditorTransforms(document, revision, syntax))) return;
     const transforms = workspace.transformations.filter(
       (item) => item.enabled && item.mode === 'auto' && item.target === 'preview',
     );
@@ -165,6 +251,10 @@ export async function start() {
       document.name,
     );
     if (revision !== renderRevision) return;
+    const valid = await inspectHtml(content);
+    if (revision !== renderRevision) return;
+    if (valid.state !== 'ready')
+      throw new Error(`Preview transformation produced unsafe HTML · ${valid.reason}`);
     const result = compile(document, content);
     showPreview(result);
     return result;
@@ -175,6 +265,9 @@ export async function start() {
     updatePopout(result.html);
     $('#css-size').textContent = size(result.css);
     $('#compile-status').textContent = `Live preview · ${result.classes} unique classes`;
+    if (pendingEditorTransforms && hasAutomaticEditorTransforms())
+      $('#compile-status').textContent +=
+        ' · Editor transforms waiting for a safe editing boundary';
   }
 
   function applySidebarState() {
@@ -251,6 +344,7 @@ export async function start() {
   function openDocument(id) {
     workspace.activeId = id;
     pendingEditorTransforms = false;
+    editingBoundary = false;
     editor.setValue(activeDocument().content);
     renderDocuments();
     save();
@@ -336,7 +430,10 @@ export async function start() {
     clearTimeout(renderTimer);
     const revision = ++renderRevision;
     const sourceDocument = structuredClone(activeDocument());
-    if (!(await applyPendingEditorTransforms(sourceDocument, revision)))
+    const syntax = await requireReady(sourceDocument.content);
+    if (revision !== renderRevision || editor.getEditingState().composing)
+      throw new Error('Finish editing before preparing export.');
+    if (!(await applyPendingEditorTransforms(sourceDocument, revision, syntax)))
       throw new Error('The document changed while preparing export. Please export again.');
     const previewTransforms = workspace.transformations.filter(
       (item) => item.enabled && item.mode === 'auto' && item.target === 'preview',
@@ -353,6 +450,10 @@ export async function start() {
     if (revision !== renderRevision)
       throw new Error('The document changed while preparing export. Please export again.');
     if (transformed.logs.length) $('#transform-log').textContent = transformed.logs.join(' · ');
+    await requireReady(transformed.checkpoint);
+    await requireReady(transformed.code);
+    if (revision !== renderRevision)
+      throw new Error('The document changed while preparing export. Please export again.');
     showPreview(compile(sourceDocument, transformed.checkpoint));
     const result = await compileExport(sourceDocument, transformed.code);
     if (revision !== renderRevision)
@@ -386,12 +487,23 @@ export async function start() {
     download,
     pickFile,
     async run(item) {
+      await requireReady(editor.getValue());
+      if (editor.getEditingState().composing)
+        throw new Error('Finish typing before running transformations.');
       if (item.target === 'preview') await render([item]);
       else {
+        clearTimeout(renderTimer);
+        const revision = ++renderRevision;
+        pendingEditorTransforms = false;
         const id = workspace.activeId;
         const source = editor.getValue();
         const result = await transform(source, [item], 'editor', activeDocument().name);
-        if (workspace.activeId !== id || editor.getValue() !== source)
+        await requireReady(result);
+        if (
+          revision !== renderRevision ||
+          workspace.activeId !== id ||
+          editor.getValue() !== source
+        )
           throw new Error('The source changed during the run. Please run again.');
         editor.replace(result);
         pendingEditorTransforms = false;

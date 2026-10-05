@@ -130,6 +130,7 @@ test('plain-text automatic transforms preserve selection direction and scrolling
     predicate: (worker) => worker.url().endsWith('TransformationWorker.js'),
   });
   await input.fill(source);
+  await input.blur();
   await workerStarted;
   const before = await input.evaluate((input) => {
     input.setSelectionRange(6000, 6010, 'backward');
@@ -152,7 +153,7 @@ test('plain-text automatic transforms preserve selection direction and scrolling
       input.scrollTop,
       input.scrollLeft,
     ]),
-  ).toEqual(before);
+  ).toEqual([before[0] - 1, before[1] - 1, ...before.slice(2)]);
 });
 
 async function openPopout(page) {

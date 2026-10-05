@@ -1,3 +1,5 @@
+import { textChange } from './Html.js';
+
 const monacoRoot = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs';
 
 export async function createEditor(container, settings, onChange) {
@@ -46,6 +48,27 @@ export async function createEditor(container, settings, onChange) {
       ariaLabel: 'HTML source',
     });
     let replacing = false;
+    let composing = false;
+    let boundary = () => {};
+    let lines = '';
+    editor.onDidBlurEditorText(() => {
+      if (!replacing) boundary();
+    });
+    editor.onDidChangeCursorSelection(() => {
+      const next = editor
+        .getSelections()
+        .map((item) => item.positionLineNumber)
+        .join(',');
+      if (!replacing && lines && next !== lines) boundary();
+      lines = next;
+    });
+    editor.onDidCompositionStart(() => {
+      composing = true;
+    });
+    editor.onDidCompositionEnd(() => {
+      composing = false;
+      boundary('compositionend');
+    });
     editor.onDidChangeModelContent(() => {
       if (!replacing) onChange(editor.getValue());
     });
@@ -59,6 +82,41 @@ export async function createEditor(container, settings, onChange) {
     }
     return {
       getValue: () => editor.getValue(),
+      onEditingBoundary: (callback) => {
+        boundary = callback;
+      },
+      getEditingState: () => ({
+        focused: editor.hasTextFocus(),
+        composing,
+        selections: editor.getSelections().map((item) => ({
+          start: editor.getModel().getOffsetAt(item.getStartPosition()),
+          end: editor.getModel().getOffsetAt(item.getEndPosition()),
+        })),
+      }),
+      applyTransformation(value) {
+        const model = editor.getModel();
+        const change = textChange(model.getValue(), value);
+        if (change.start === change.end && !change.text) return;
+        const scroll = { scrollTop: editor.getScrollTop(), scrollLeft: editor.getScrollLeft() };
+        replacing = true;
+        try {
+          editor.pushUndoStop();
+          editor.executeEdits('automatic-transformation', [
+            {
+              range: window.monaco.Range.fromPositions(
+                model.getPositionAt(change.start),
+                model.getPositionAt(change.end),
+              ),
+              text: change.text,
+              forceMoveMarkers: true,
+            },
+          ]);
+          editor.pushUndoStop();
+          editor.setScrollPosition(scroll);
+        } finally {
+          replacing = false;
+        }
+      },
       setValue(value, { preserveView: keepView = false } = {}) {
         if (value === editor.getValue()) return;
         replacing = true;
@@ -108,6 +166,31 @@ export async function createEditor(container, settings, onChange) {
     input.spellcheck = false;
     container.replaceChildren(input);
     input.addEventListener('input', () => onChange(input.value));
+    let boundary = () => {};
+    let composing = false;
+    let line = 1;
+    let replacing = false;
+    const checkLine = () => {
+      const next = input.value
+        .slice(
+          0,
+          input.selectionDirection === 'backward' ? input.selectionStart : input.selectionEnd,
+        )
+        .split('\n').length;
+      if (!replacing && next !== line) boundary();
+      line = next;
+    };
+    input.addEventListener('blur', () => boundary());
+    input.addEventListener('select', checkLine);
+    input.addEventListener('keyup', checkLine);
+    input.addEventListener('click', checkLine);
+    input.addEventListener('compositionstart', () => {
+      composing = true;
+    });
+    input.addEventListener('compositionend', () => {
+      composing = false;
+      boundary('compositionend');
+    });
     function setValue(value, { preserveView = false } = {}) {
       if (value === input.value) return;
       const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = input;
@@ -121,6 +204,31 @@ export async function createEditor(container, settings, onChange) {
     return {
       fallback: true,
       getValue: () => input.value,
+      onEditingBoundary: (callback) => {
+        boundary = callback;
+      },
+      getEditingState: () => ({
+        focused: document.activeElement === input,
+        composing,
+        selections: [{ start: input.selectionStart, end: input.selectionEnd }],
+      }),
+      applyTransformation(value) {
+        const change = textChange(input.value, value);
+        const map = (offset) =>
+          offset <= change.start
+            ? offset
+            : offset >= change.end
+              ? offset + change.text.length - (change.end - change.start)
+              : change.start + change.text.length;
+        const { selectionStart, selectionEnd, selectionDirection, scrollTop, scrollLeft } = input;
+        replacing = true;
+        input.value = value;
+        input.setSelectionRange(map(selectionStart), map(selectionEnd), selectionDirection);
+        input.scrollTop = scrollTop;
+        input.scrollLeft = scrollLeft;
+        line = input.value.slice(0, input.selectionEnd).split('\n').length;
+        replacing = false;
+      },
       setValue,
       replace: (value) => {
         setValue(value, { preserveView: true });

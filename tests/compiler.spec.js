@@ -17,6 +17,44 @@ async function exportSource(page, content, options = {}) {
   );
 }
 
+test('preview resets html and body spacing without including the reset in exports', async ({
+  page,
+  context,
+}) => {
+  for (const content of [
+    '<section><p class="p-2">Fragment</p></section>',
+    '<!doctype html><html><head></head><body><p class="p-2">Full document</p></body></html>',
+  ]) {
+    for (const preflight of [false, true]) {
+      const { preview, exported } = await page.evaluate(
+        async ({ content, preflight }) => {
+          const { compile, compileExport } = await import('./app/Services/Compiler.js');
+          const { newDocument } = await import('./config/editor.js');
+          const document = { ...newDocument('Reset.html', content), preflight };
+          return { preview: compile(document), exported: await compileExport(document) };
+        },
+        { content, preflight },
+      );
+      await page.locator('#preview').evaluate((iframe, html) => {
+        iframe.srcdoc = html;
+      }, preview.html);
+      for (const tag of ['html', 'body']) {
+        await expect(page.frameLocator('#preview').locator(tag)).toHaveCSS('margin', '0px');
+        await expect(page.frameLocator('#preview').locator(tag)).toHaveCSS('padding', '0px');
+      }
+      expect(preview.exportHtml).not.toContain('data-preview=');
+      expect(exported.exportHtml).not.toContain('data-preview=');
+      expect(exported.css).not.toMatch(/html\s*,\s*body\s*\{/);
+      if (!preflight) {
+        const host = await context.newPage();
+        await host.setContent(exported.exportHtml);
+        await expect(host.locator('body')).toHaveCSS('margin', '8px');
+        await host.close();
+      }
+    }
+  }
+});
+
 test('scoped export styles descendants with arbitrary classes and variants while leaving the wrapper unstyled', async ({
   page,
   context,
