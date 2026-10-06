@@ -250,20 +250,6 @@ export function validateWorkspace(value) {
   if (value?.version !== 1 || !Array.isArray(value.documents) || !value.documents.length) {
     throw new Error('This is not a supported workspace backup.');
   }
-  const documents = value.documents.map((item) => {
-    if (typeof item.content !== 'string' || typeof item.name !== 'string')
-      throw new Error('Invalid document in backup.');
-    const document = {
-      ...newDocument(item.name, item.content),
-      id: String(item.id || crypto.randomUUID()),
-    };
-    document.safelist = typeof item.safelist === 'string' ? item.safelist : '';
-    document.preflight = item.preflight !== false;
-    if (item.colors) document.colors = validateColors(item.colors);
-    return document;
-  });
-  if (new Set(documents.map((item) => item.id)).size !== documents.length)
-    throw new Error('Document IDs must be unique.');
   const defaults = newWorkspace().settings;
   const settings = { ...defaults, ...value.settings };
   if (!themes[settings.theme] && settings.theme !== 'custom') settings.theme = 'light';
@@ -279,6 +265,21 @@ export function validateWorkspace(value) {
   settings.fontSize = Math.min(24, Math.max(11, Number(settings.fontSize) || 14));
   settings.wordWrap = settings.wordWrap !== false;
   settings.sidebarCollapsed = settings.sidebarCollapsed === true;
+  const theme = themes[settings.theme] || settings.customTheme;
+  const documents = value.documents.map((item) => {
+    if (typeof item.content !== 'string' || typeof item.name !== 'string')
+      throw new Error('Invalid document in backup.');
+    const document = {
+      ...newDocument(item.name, item.content, theme),
+      id: String(item.id || crypto.randomUUID()),
+    };
+    document.safelist = typeof item.safelist === 'string' ? item.safelist : '';
+    document.preflight = item.preflight !== false;
+    if (item.colors) document.colors = validateColors(item.colors);
+    return document;
+  });
+  if (new Set(documents.map((item) => item.id)).size !== documents.length)
+    throw new Error('Document IDs must be unique.');
   return {
     version: 1,
     documents,
@@ -295,7 +296,7 @@ export function validateColors(colors, keys = Object.keys(colors)) {
   for (const key of keys) {
     if (!/^[a-z][a-z0-9-]*$/.test(key) || !colorPattern.test(colors[key])) {
       throw new Error(
-        'Use lowercase color names and six-digit hex values, for example "brand": "#0f766e".',
+        'Use lowercase color names and six-digit hex values, for example "accent": "#0f766e".',
       );
     }
     result[key] = colors[key];

@@ -25,50 +25,53 @@ export const themes = {
   },
 };
 
-export const defaultColors = { brand: '#0f766e', canvas: '#f4f7f6', ink: '#183b38' };
+export function themeColors(theme) {
+  const { background, surface, text, accent } = theme;
+  return { background, surface, text, accent };
+}
 
-export const starterHtml = `<main class="min-h-screen bg-canvas px-6 py-16 text-ink">
+export const starterHtml = `<main class="min-h-screen bg-background px-6 py-16 text-text">
   <div class="mx-auto max-w-xl">
-    <span class="rounded-full bg-brand/10 px-3 py-1 text-xs font-semibold text-brand">
+    <span class="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
       A little space to create
     </span>
     <h1 class="mt-6 text-4xl font-semibold tracking-tight sm:text-5xl">
       Start with an idea.
-      <span class="text-brand">Make it yours.</span>
+      <span class="text-accent">Make it yours.</span>
     </h1>
-    <p class="mt-5 text-base leading-7 text-ink/70">
+    <p class="mt-5 text-base leading-7 text-text/70">
       Edit the HTML, try a new color, and watch it come together.
       When you're ready, take only the styles you need.
     </p>
     <div class="mt-8 flex flex-wrap gap-3">
-      <a href="#details" class="rounded-lg bg-brand px-5 py-3 text-sm font-medium text-white hover:opacity-90">
+      <a href="#details" class="rounded-lg bg-accent px-5 py-3 text-sm font-medium text-background hover:opacity-90">
         Explore the details &rarr;
       </a>
-      <span class="rounded-lg border border-ink/15 px-5 py-3 text-sm">
+      <span class="rounded-lg border border-text/15 px-5 py-3 text-sm">
         Built with Tailwind utilities
       </span>
     </div>
     <section id="details" class="mt-12 grid gap-4 sm:grid-cols-2">
-      <article class="rounded-xl border border-ink/10 bg-white p-5">
-        <p class="text-xs font-semibold uppercase tracking-wider text-brand">01 / Create</p>
+      <article class="rounded-xl border border-text/10 bg-surface p-5">
+        <p class="text-xs font-semibold uppercase tracking-wider text-accent">01 / Create</p>
         <h2 class="mt-3 font-semibold">Less setup. More making.</h2>
-        <p class="mt-2 text-sm leading-6 text-ink/70">A simple workspace for your next component or page.</p>
+        <p class="mt-2 text-sm leading-6 text-text/70">A simple workspace for your next component or page.</p>
       </article>
-      <article class="rounded-xl border border-ink/10 bg-white p-5">
-        <p class="text-xs font-semibold uppercase tracking-wider text-brand">02 / Keep</p>
+      <article class="rounded-xl border border-text/10 bg-surface p-5">
+        <p class="text-xs font-semibold uppercase tracking-wider text-accent">02 / Keep</p>
         <h2 class="mt-3 font-semibold">Ready to go anywhere.</h2>
-        <p class="mt-2 text-sm leading-6 text-ink/70">Copy your HTML and generated styles together. Ready to paste anywhere.</p>
+        <p class="mt-2 text-sm leading-6 text-text/70">Copy your HTML and generated styles together. Ready to paste anywhere.</p>
       </article>
     </section>
   </div>
 </main>`;
 
-export function newDocument(name = 'Untitled.html', content = '') {
+export function newDocument(name = 'Untitled.html', content = '', theme = themes.light) {
   return {
     id: crypto.randomUUID(),
     name,
     content,
-    colors: { ...defaultColors },
+    colors: themeColors(theme),
     safelist: '',
     preflight: true,
   };

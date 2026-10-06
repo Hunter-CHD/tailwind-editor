@@ -5,6 +5,40 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./preview.html');
 });
 
+test('missing document palettes use the workspace theme while saved palettes remain independent', async ({
+  page,
+}) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace } = await import('./config/editor.js');
+    const { validateWorkspace, saveWorkspace, loadWorkspace } = await import(
+      './app/Models/Workspace.js'
+    );
+    const workspace = newWorkspace();
+    workspace.settings.theme = 'custom';
+    workspace.settings.customTheme = {
+      background: '#102030',
+      surface: '#182838',
+      text: '#eeeeee',
+      accent: '#ff0080',
+    };
+    delete workspace.documents[0].colors;
+    workspace.documents.push(
+      { id: 'saved', name: 'Saved.html', content: '<p>Saved</p>', colors: { brand: '#123456' } },
+      { id: 'empty', name: 'Empty.html', content: '', colors: {} },
+    );
+    const validated = validateWorkspace(workspace);
+    await saveWorkspace(validated);
+    const { workspace: loaded } = await loadWorkspace();
+    return { loaded, validated };
+  });
+  expect(result.validated.documents.map((document) => document.colors)).toEqual([
+    { background: '#102030', surface: '#182838', text: '#eeeeee', accent: '#ff0080' },
+    { brand: '#123456' },
+    {},
+  ]);
+  expect(result.loaded).toEqual(result.validated);
+});
+
 async function storedRecords(page) {
   return page.evaluate(async () => {
     const database = await new Promise((resolve, reject) => {

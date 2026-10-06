@@ -1,4 +1,4 @@
-import { newDocument, newWorkspace, themes } from '../../config/editor.js';
+import { newDocument, newWorkspace, themes, themeColors } from '../../config/editor.js';
 import {
   loadWorkspace,
   saveWorkspace,
@@ -525,7 +525,7 @@ export async function start() {
     },
     new: () =>
       askName('New document', 'Untitled.html', (name) => {
-        const document = newDocument(name);
+        const document = newDocument(name, '', getTheme());
         workspace.documents.push(document);
         openDocument(document.id);
       }),
@@ -545,12 +545,13 @@ export async function start() {
     delete: () => {
       if (!confirm(`Delete "${activeDocument().name}" from this workspace?`)) return;
       workspace.documents = workspace.documents.filter((item) => item.id !== workspace.activeId);
-      if (!workspace.documents.length) workspace.documents.push(newDocument());
+      if (!workspace.documents.length)
+        workspace.documents.push(newDocument('Untitled.html', '', getTheme()));
       openDocument(workspace.documents[0].id);
     },
     'import-html': () =>
       pickFile('.html,.htm,text/html,text/plain', async (file) => {
-        const document = newDocument(file.name, await file.text());
+        const document = newDocument(file.name, await file.text(), getTheme());
         workspace.documents.push(document);
         openDocument(document.id);
       }),
@@ -579,6 +580,9 @@ export async function start() {
       $('#safelist').value = activeDocument().safelist;
       $('#palette-json').value = JSON.stringify(activeDocument().colors, null, 2);
       $('#document-settings-dialog').showModal();
+    },
+    'import-theme-colors': () => {
+      $('#palette-json').value = JSON.stringify(themeColors(getTheme()), null, 2);
     },
     transformations: () => {
       transformations.render();

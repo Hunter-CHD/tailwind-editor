@@ -1,5 +1,96 @@
 import { test, expect } from '@playwright/test';
 
+test('document palettes copy the selected editor theme and can import a new theme explicitly', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+  const settings = page.locator('#document-settings-dialog');
+  const palette = settings.getByLabel('Color names and hex values');
+  const gear = page.getByRole('button', { name: 'Document settings', exact: true });
+  const paper = {
+    background: '#f5f6f8',
+    surface: '#ffffff',
+    text: '#202b36',
+    accent: '#0f766e',
+  };
+  await gear.click();
+  expect(JSON.parse(await palette.inputValue())).toEqual(paper);
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.frameLocator('#preview').locator('main')).toHaveCSS(
+    'background-color',
+    'rgb(245, 246, 248)',
+  );
+  await expect(page.frameLocator('#preview').locator('main')).toHaveCSS('color', 'rgb(32, 43, 54)');
+
+  await page.getByRole('button', { name: 'Themes', exact: true }).click();
+  await page.getByRole('button', { name: 'Midnight', exact: true }).click();
+  await page.locator('#theme-dialog [data-close]').click();
+  await page.getByRole('button', { name: 'New document', exact: true }).click();
+  await page.locator('#name-input').fill('Midnight');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await gear.click();
+  const midnight = {
+    background: '#141a23',
+    surface: '#1d2531',
+    text: '#e4e9f1',
+    accent: '#5eead4',
+  };
+  expect(JSON.parse(await palette.inputValue())).toEqual(midnight);
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+
+  const custom = {
+    background: '#102030',
+    surface: '#182838',
+    text: '#eeeeee',
+    accent: '#ff0080',
+  };
+  await page.getByRole('button', { name: 'Themes', exact: true }).click();
+  for (const [name, color] of Object.entries(custom))
+    await page.locator(`#custom-theme-form [name="${name}"]`).fill(color);
+  await page.getByRole('button', { name: 'Save custom theme', exact: true }).click();
+  await page.locator('#theme-dialog [data-close]').click();
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import HTML', exact: true }).click();
+  await (
+    await chooserPromise
+  ).setFiles({
+    name: 'Imported.html',
+    mimeType: 'text/html',
+    buffer: Buffer.from('<main><p class="bg-background text-text">Imported colors</p></main>'),
+  });
+  await expect(page.locator('#document-name')).toHaveText('Imported.html');
+  await gear.click();
+  expect(JSON.parse(await palette.inputValue())).toEqual(custom);
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  const importedText = page.frameLocator('#preview').getByText('Imported colors', { exact: true });
+  await expect(importedText).toHaveCSS('background-color', 'rgb(16, 32, 48)');
+  await expect(importedText).toHaveCSS('color', 'rgb(238, 238, 238)');
+
+  await page.getByRole('button', { name: 'Themes', exact: true }).click();
+  await page.getByRole('button', { name: 'Paper', exact: true }).click();
+  await page.locator('#theme-dialog [data-close]').click();
+  await gear.click();
+  expect(JSON.parse(await palette.inputValue())).toEqual(custom);
+  await settings.getByRole('button', { name: 'Import editor theme', exact: true }).click();
+  expect(JSON.parse(await palette.inputValue())).toEqual(paper);
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await gear.click();
+  expect(JSON.parse(await palette.inputValue())).toEqual(custom);
+  await settings.getByRole('button', { name: 'Import editor theme', exact: true }).click();
+  await settings.getByRole('button', { name: 'Save settings', exact: true }).click();
+  await expect(importedText).toHaveCSS('background-color', 'rgb(245, 246, 248)');
+  await expect(page.locator('#save-status')).toHaveText('All changes saved');
+  await page.reload();
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+  await gear.click();
+  expect(JSON.parse(await palette.inputValue())).toEqual(paper);
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('#document-list button').filter({ hasText: 'Midnight.html' }).click();
+  await gear.click();
+  expect(JSON.parse(await palette.inputValue())).toEqual(midnight);
+});
+
 test('theme pickers open and reopen with fully opaque colors before any slider changes', async ({
   page,
 }) => {

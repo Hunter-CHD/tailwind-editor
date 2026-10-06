@@ -467,7 +467,7 @@ test('document colors and a custom interface theme persist', async ({ page }) =>
   await expect(page.locator('#document-settings-dialog')).toBeVisible();
   await page
     .locator('#palette-json')
-    .fill('{"brand":"#ff0000","canvas":"#ffffff","ink":"#111111"}');
+    .fill('{"accent":"#ff0000","background":"#ffffff","surface":"#ffffff","text":"#111111"}');
   await page
     .locator('#document-settings-dialog')
     .getByRole('button', { name: 'Save settings', exact: true })
@@ -546,7 +546,7 @@ test('document settings stay with each document and separate from workspace pref
   const secondColors = JSON.parse(
     await documentSettings.getByLabel('Color names and hex values').inputValue(),
   );
-  expect(secondColors.brand).toBe('#0f766e');
+  expect(secondColors.accent).toBe('#0f766e');
   secondColors.brand = '#0000ff';
   await documentSettings
     .getByLabel('Color names and hex values')

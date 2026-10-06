@@ -365,7 +365,7 @@
     ><textarea
       id="safelist"
       rows="3"
-      placeholder="hidden block bg-brand hover:bg-brand/80"
+      placeholder="hidden block bg-accent hover:bg-accent/80"
       spellcheck="false"
     ></textarea>
     <p class="subtle">
@@ -375,9 +375,11 @@
     <hr />
     <h3>Document colors</h3>
     <p>
-      Named colors become utilities like <code>bg-brand</code>, <code>text-ink/70</code>, and
-      <code>border-brand</code>. They apply to this document's preview and export.
+      New documents copy the editor theme's background, surface, text, and accent colors. Use them
+      as <code>bg-background</code>, <code>text-text/70</code>, or <code>border-accent</code> in
+      this document's preview and export.
     </p>
+    <button type="button" data-action="import-theme-colors">Import editor theme</button>
     <label for="palette-json">Color names and hex values</label
     ><textarea id="palette-json" class="code-input" rows="6" spellcheck="false"></textarea>
     <div class="dialog-footer"><button class="primary" type="submit">Save settings</button></div>

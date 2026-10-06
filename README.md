@@ -80,17 +80,18 @@ Use **Themes** for editor appearance and **Document settings** for the current d
 The theme color swatches open [yaireo/color-picker 0.15.1](https://github.com/yairEO/color-picker), with hue, saturation, and lightness sliders plus a CSS color field. You can also type hex values directly beside each swatch. **Save custom theme** applies all four colors together. Theme colors remain opaque six-digit hex values, and no picker swatches are stored separately.
 
 - **Editor appearance:** Paper, Midnight, Sand, or a saved custom background, surface, text, and accent. The selected colors also apply to Monaco.
-- **Document colors:** a JSON map of lowercase names to six-digit hex colors in **Document settings**, opened with the toolbar gear. Each document has its own map, used by preview and export. **Save settings** applies colors, Preflight, and additional classes together.
+- **Document colors:** a JSON map of lowercase names to six-digit hex colors in **Document settings**, opened with the toolbar gear. New and imported HTML documents copy the current editor theme's background, surface, text, and accent. Each document keeps its own palette for preview and export when the editor theme changes. **Import editor theme** replaces the palette in the form with the current theme's colors; **Save settings** applies colors, Preflight, and additional classes together.
 
 ```json
 {
-  "brand": "#0f766e",
-  "canvas": "#f4f7f6",
-  "ink": "#183b38"
+  "background": "#f5f6f8",
+  "surface": "#ffffff",
+  "text": "#202b36",
+  "accent": "#0f766e"
 }
 ```
 
-Use these as `bg-brand`, `hover:bg-brand/80`, `text-ink`, and `border-brand`. The default Tailwind palette remains available.
+Use these as `bg-background`, `bg-surface`, `text-text`, `hover:bg-accent/80`, and `border-accent`. You can add any named colors you need. The default Tailwind palette remains available.
 
 ## Transformations
 
