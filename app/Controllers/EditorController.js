@@ -9,6 +9,7 @@ import { compile, compileExport } from '../Services/Compiler.js';
 import { createEditor, formatHtml } from '../Services/Editor.js';
 import { runTransformations } from '../Services/Transformations.js';
 import { inspectHtml, affectsEditingRegion } from '../Services/Html.js';
+import { bindThemeColorPicker } from '../Services/ThemeColorPicker.js';
 import { bindTransformations } from './TransformationController.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -71,6 +72,7 @@ export async function start() {
     refresh();
   });
   if (editor.fallback) notify('The code editor could not load. Plain-text editing is available.');
+  const themeColorPicker = bindThemeColorPicker($('#custom-theme-form'), $('#theme-color-picker'));
   editor.onEditingBoundary((reason) => {
     editingBoundary = true;
     if (pendingEditorTransforms && (hasAutomaticEditorTransforms() || reason === 'compositionend'))
@@ -424,6 +426,7 @@ export async function start() {
     for (const input of $('#custom-theme-form').elements) {
       if (input.name) input.value = workspace.settings.customTheme[input.name];
     }
+    themeColorPicker.sync();
   }
 
   async function prepareExport() {
@@ -654,6 +657,7 @@ export async function start() {
     event.preventDefault();
     workspace.settings.customTheme = Object.fromEntries(new FormData(event.target));
     workspace.settings.theme = 'custom';
+    themeColorPicker.close();
     applyTheme();
     save();
     renderThemes();

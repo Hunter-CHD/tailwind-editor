@@ -185,13 +185,116 @@
   <div id="theme-presets" class="theme-presets"></div>
   <form id="custom-theme-form">
     <div class="color-fields">
-      <label>Background<input type="color" name="background" /></label
-      ><label>Surface<input type="color" name="surface" /></label
-      ><label>Text<input type="color" name="text" /></label
-      ><label>Accent<input type="color" name="accent" /></label>
+      <div class="theme-color-field">
+        <label for="theme-background">Background</label>
+        <div class="theme-color-input">
+          <button
+            type="button"
+            data-theme-color="background"
+            aria-label="Pick background color"
+            aria-controls="theme-color-picker"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+          <input
+            id="theme-background"
+            name="background"
+            required
+            pattern="#[0-9a-fA-F]{6}"
+            maxlength="7"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </div>
+      <div class="theme-color-field">
+        <label for="theme-surface">Surface</label>
+        <div class="theme-color-input">
+          <button
+            type="button"
+            data-theme-color="surface"
+            aria-label="Pick surface color"
+            aria-controls="theme-color-picker"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+          <input
+            id="theme-surface"
+            name="surface"
+            required
+            pattern="#[0-9a-fA-F]{6}"
+            maxlength="7"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </div>
+      <div class="theme-color-field">
+        <label for="theme-text">Text</label>
+        <div class="theme-color-input">
+          <button
+            type="button"
+            data-theme-color="text"
+            aria-label="Pick text color"
+            aria-controls="theme-color-picker"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+          <input
+            id="theme-text"
+            name="text"
+            required
+            pattern="#[0-9a-fA-F]{6}"
+            maxlength="7"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </div>
+      <div class="theme-color-field">
+        <label for="theme-accent">Accent</label>
+        <div class="theme-color-input">
+          <button
+            type="button"
+            data-theme-color="accent"
+            aria-label="Pick accent color"
+            aria-controls="theme-color-picker"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true"></span>
+          </button>
+          <input
+            id="theme-accent"
+            name="accent"
+            required
+            pattern="#[0-9a-fA-F]{6}"
+            maxlength="7"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </div>
     </div>
     <button type="submit">Save custom theme</button>
   </form>
+  <div
+    id="theme-color-picker"
+    class="theme-picker-popover"
+    popover
+    role="dialog"
+    aria-labelledby="theme-picker-title"
+  >
+    <div class="theme-picker-heading">
+      <h3 id="theme-picker-title">Choose a color</h3>
+      <button type="button" data-close-picker class="icon-button" aria-label="Close color picker">
+        ×
+      </button>
+    </div>
+    <div class="theme-picker-controls">Loading color picker…</div>
+  </div>
 </dialog>
 
 <dialog id="export-dialog" class="wide-dialog">

@@ -36,6 +36,7 @@ app/
     Editor.js                    Monaco and Prettier integration
     Html.js                      HTML readiness and active editing region checks
     HtmlWorker.js                HTML parsing away from the editor thread
+    ThemeColorPicker.js          Theme color inputs and picker popup
     Transformations.js           Worker lifecycle and timeout
     TransformationWorker.js      Shared DOM/string pipeline
 config/
@@ -75,6 +76,8 @@ Preview documents apply a separate `html, body { margin: 0; padding: 0; }` basel
 ## Color themes
 
 Use **Themes** for editor appearance and **Document settings** for the current document's palette:
+
+The theme color swatches open [yaireo/color-picker 0.15.1](https://github.com/yairEO/color-picker), with hue, saturation, and lightness sliders plus a CSS color field. You can also type hex values directly beside each swatch. **Save custom theme** applies all four colors together. Theme colors remain opaque six-digit hex values, and no picker swatches are stored separately.
 
 - **Editor appearance:** Paper, Midnight, Sand, or a saved custom background, surface, text, and accent. The selected colors also apply to Monaco.
 - **Document colors:** a JSON map of lowercase names to six-digit hex colors in **Document settings**, opened with the toolbar gear. Each document has its own map, used by preview and export. **Save settings** applies colors, Preflight, and additional classes together.
