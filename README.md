@@ -73,6 +73,8 @@ The live preview and popout run in sandboxed iframes without access to the edito
 
 Preview documents apply a separate `html, body { margin: 0; padding: 0; }` baseline in both the inline preview and popout iframe. Authored styles and utilities can override it. This preview reset is excluded from generated CSS and exported HTML.
 
+Ordinary preview links navigate the containing tab: the editor tab for the inline preview, or the preview tab for the popout. Section links such as `#details` stay inside the preview. Authored link targets and base targets are preserved. Parent navigation requires a user gesture. These preview defaults do not change saved HTML or exports.
+
 ## Color themes
 
 Use **Themes** for editor appearance and **Document settings** for the current document's palette:

@@ -162,6 +162,38 @@ async function openPopout(page) {
   return opened;
 }
 
+for (const detached of [false, true]) {
+  test(`${detached ? 'popout' : 'inline'} preview links navigate the parent and section links stay in the preview`, async ({
+    page,
+    context,
+  }) => {
+    await context.route('https://preview-links.test/**', (route) =>
+      route.fulfill({ contentType: 'text/html', body: '<h1>Link destination</h1>' }),
+    );
+    await openEditor(page);
+    const source = `<main>
+      <a href="#details">Jump to details</a>
+      <a href="https://preview-links.test/next">Leave preview</a>
+      <section id="details" style="margin-top: 1200px">Section content</section>
+    </main>`;
+    await setSource(page, source);
+    const parent = detached ? await openPopout(page) : page;
+    const frame = parent.frameLocator('#preview');
+    await frame.getByRole('link', { name: 'Jump to details' }).click();
+    await expect(frame.locator('#details')).toBeInViewport();
+    await expect(parent).toHaveURL(detached ? /preview\.html#/ : /tailwind-editor\/$/);
+    await expect(frame.getByRole('link', { name: 'Leave preview' })).toBeVisible();
+    expect(await page.evaluate(() => window.monaco.editor.getModels()[0].getValue())).toBe(source);
+    await frame.getByRole('link', { name: 'Leave preview' }).click();
+    await expect(parent).toHaveURL('https://preview-links.test/next');
+    await expect(parent.getByRole('heading', { name: 'Link destination' })).toBeVisible();
+    if (detached) {
+      await expect(page.locator('.preview-pane')).toBeVisible();
+      await expect(page).toHaveURL(/tailwind-editor\/$/);
+    }
+  });
+}
+
 test('popout follows edits, colors, and document switches and can be reused or reopened', async ({
   page,
   context,
@@ -180,7 +212,10 @@ test('popout follows edits, colors, and document switches and can be reused or r
     .toBeGreaterThan(originalEditorWidth * 1.5);
   await expect(popup).toHaveURL(/\/tailwind-editor\/preview\.html#[\w-]+$/);
   await expect(popup.frameLocator('iframe').locator('h1')).toContainText('Start with an idea.');
-  await expect(popup.locator('iframe')).toHaveAttribute('sandbox', 'allow-scripts');
+  await expect(popup.locator('iframe')).toHaveAttribute(
+    'sandbox',
+    'allow-scripts allow-top-navigation-by-user-activation',
+  );
   await expect(popup.locator('body')).toHaveCSS('margin', '0px');
   await expect(popup.locator('body')).toHaveCSS('padding', '0px');
   await expect(popup.locator('iframe')).toHaveCSS('border-width', '0px');

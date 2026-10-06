@@ -67,6 +67,24 @@ function compileSource(document, content) {
     previewReset.dataset.preview = 'document-reset';
     previewReset.textContent = 'html, body { margin: 0; padding: 0; }';
     parsed.head.prepend(previewReset);
+    if (!parsed.querySelector('base[target]')) {
+      // Set only the browsing target so authored base URLs still resolve assets
+      // and relative links. These additions never enter the export markup.
+      const previewTarget = parsed.createElement('base');
+      previewTarget.dataset.preview = 'link-target';
+      previewTarget.target = '_parent';
+      parsed.head.prepend(previewTarget);
+      for (const link of parsed.querySelectorAll(
+        'a[href]:not([target]), area[href]:not([target])',
+      )) {
+        const href = link.getAttribute('href').trim();
+        if (href.startsWith('#')) {
+          // srcdoc otherwise resolves fragments against the containing page URL.
+          link.href = `about:srcdoc${href}`;
+          link.target = '_self';
+        }
+      }
+    }
     const classes = new Set(
       [...parsed.querySelectorAll('[class]')].flatMap((element) => [...element.classList]),
     );

@@ -17,6 +17,48 @@ async function exportSource(page, content, options = {}) {
   );
 }
 
+test('preview link handling preserves authored targets and base URLs without changing exports', async ({
+  page,
+}) => {
+  const result = await page.evaluate(async () => {
+    const { compile, compileExport } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const source =
+      '<!doctype html><html><head><base href="https://preview-links.test/"></head><body><main><a href="next">Default</a><a href="#details">Section</a><a href="frame" target="_self">Frame</a><a href="tab" target="_blank">Tab</a><section id="details">Details</section></main></body></html>';
+    const document = newDocument('Links.html', source);
+    const preview = compile(document);
+    const exported = await compileExport(document);
+    const parse = (html) => new DOMParser().parseFromString(html, 'text/html');
+    const original = parse(source);
+    const rendered = parse(preview.html);
+    const exportLinks = (html) =>
+      [...parse(html).querySelectorAll('a')].map((link) => link.outerHTML);
+    const authoredBase = compile(
+      newDocument('Authored.html', source.replace('<base href=', '<base target="_self" href=')),
+    );
+    return {
+      originalLinks: exportLinks(source),
+      previewTargets: [...rendered.querySelectorAll('a[target]')].map((link) => [
+        link.textContent,
+        link.target,
+      ]),
+      baseHref: rendered.querySelector('base[href]').getAttribute('href'),
+      originalBase: original.querySelector('base').outerHTML,
+      exportBases: [preview.exportHtml, exported.exportHtml].map((html) =>
+        [...parse(html).querySelectorAll('base')].map((base) => base.outerHTML),
+      ),
+      exportLinks: [exportLinks(preview.exportHtml), exportLinks(exported.exportHtml)],
+      authoredBaseTarget: parse(authoredBase.html).querySelector('base[target]').target,
+    };
+  });
+  expect(result.baseHref).toBe('https://preview-links.test/');
+  expect(result.previewTargets).toContainEqual(['Frame', '_self']);
+  expect(result.previewTargets).toContainEqual(['Tab', '_blank']);
+  expect(result.exportBases).toEqual([[result.originalBase], [result.originalBase]]);
+  expect(result.exportLinks).toEqual([result.originalLinks, result.originalLinks]);
+  expect(result.authoredBaseTarget).toBe('_self');
+});
+
 test('preview resets html and body spacing without including the reset in exports', async ({
   page,
   context,
