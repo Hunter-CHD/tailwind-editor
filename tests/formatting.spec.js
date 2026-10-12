@@ -3,8 +3,79 @@ import {
   expect
 } from '@playwright/test';
 import {
-  formatExportCss
+  formatExportCss,
+  formatAuthoredCss
 } from '../app/Services/Formatting.js';
+import beautify from 'js-beautify';
+
+test('authored CSS compacts rules within the limit and includes nesting indentation', () => {
+  expect(formatAuthoredCss('.a{color:red;}', beautify, {
+    printWidth: 18
+  })).toBe('.a { color: red; }\n');
+  expect(formatAuthoredCss('.a{color:red;}', beautify, {
+    printWidth: 17
+  })).toBe('.a {\n  color: red;\n}\n');
+  const source = '@media(min-width:600px){.a{color:red;}}';
+  expect(formatAuthoredCss(source, beautify, {
+    printWidth: 20
+  })).toContain('  .a { color: red; }\n');
+  expect(formatAuthoredCss(source, beautify, {
+    printWidth: 19
+  })).toContain('  .a {\n    color: red;\n  }');
+  expect(formatAuthoredCss('.a{color:red;}', beautify, {
+    printWidth: 19,
+    indent: '  '
+  })).toContain('.a {\n');
+});
+
+test('authored CSS compacts Windows line endings while preserving its output line ending', () => {
+  const source = 'img {\r\n  min-width: 0\r\n}\r\n@media(min-width:768px){\r\n.a{color:red;}\r\n}';
+  const result = formatAuthoredCss(source, beautify);
+  expect(result).toContain('img { min-width: 0 }\r\n');
+  expect(result).toContain('  .a { color: red; }\r\n');
+  expect(formatAuthoredCss(result, beautify)).toBe(result);
+});
+
+test('authored CSS preserves strings, comments, nested selectors and declaration order', () => {
+  const source = '.a::before{content:"a   b; }";color:red;color:blue}/* keep\ncomment */.b{display:flex}.c{color:red;&:hover{color:blue}}';
+  const result = formatAuthoredCss(source, beautify);
+  expect(result).toContain('"a   b; }"');
+  expect(result).toContain('/* keep\ncomment */');
+  expect(result.indexOf('color: red')).toBeLessThan(result.indexOf('color: blue'));
+  expect(result).toMatch(/\.c \{\n/);
+  expect(formatAuthoredCss(result, beautify)).toBe(result);
+});
+
+test('embedded CSS measures the configured width limit including HTML indentation', async ({
+  page
+}) => {
+  await page.goto('./');
+  const result = await page.evaluate(async () => {
+    const {
+      formatHtml
+    } = await import('./app/Services/Editor.js');
+    const {
+      cssFormatOptions
+    } = await import('./app/Services/Formatting.js');
+    const width = cssFormatOptions.wrap_line_length;
+    const shortSelector = '.' + 'a'.repeat(width - 20);
+    const longSelector = '.' + 'b'.repeat(width - 18);
+    const source = `<style>${shortSelector}{color:red;}${longSelector}{color:blue;}</style>`;
+    const formatted = await formatHtml(source);
+    const nested = await formatHtml(`<section><style>${shortSelector}{color:red;}</style></section>`);
+    return {
+      formatted,
+      nested,
+      shortSelector,
+      longSelector,
+      twice: await formatHtml(formatted)
+    };
+  });
+  expect(result.formatted).toContain(`  ${result.shortSelector} { color: red; }\n`);
+  expect(result.formatted).toContain(`  ${result.longSelector} {\n    color: blue;\n  }`);
+  expect(result.nested).toContain(`    ${result.shortSelector} {\n      color: red;\n    }`);
+  expect(result.twice).toBe(result.formatted);
+});
 
 test('export CSS puts each rule on one line while retaining nested groups and literal braces', () => {
   const source = '@scope (#card) {\n.flex{display:flex}.label::before{content:"}; {"}.\\{escaped\\}{color:red}@media(min-width:640px){.grid{display:grid}.gap{gap:1rem}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}\n}';
@@ -120,11 +191,11 @@ test('HTML formatting beautifies embedded CSS while preserving prose and CSS str
       twice: await formatHtml(formatted),
     };
   });
-  expect(result.css).toMatch(/\.card\s*\{\s*\n\s+color: red;/);
+  expect(result.css).toMatch(/\.card \{ color: red; padding: 1rem; --label: "a   b" }/);
   expect(result.css).toContain('padding: 1rem;');
   expect(result.css).toContain('"a   b"');
   expect(result.css).toMatch(/@media\s*\(min-width:\s*600px\)\s*\{\s*\n/);
-  expect(result.nestedCss).toMatch(/\.nested\s*\{\s*\n\s+margin: 0;/);
+  expect(result.nestedCss).toContain('.nested { margin: 0; color: blue }');
   expect(result.formatted).toContain('Keep   this\ttext\non its  original lines');
   expect(result.formatted).toContain('@value:  red;\n.x{color:  @value}');
   expect(result.twice).toBe(result.formatted);
@@ -153,7 +224,7 @@ test('closing tags follow the last text line without changing internal text whit
   expect(result.formatted).toContain('<span>nested\n</span>');
   expect(result.formatted).toContain('area\n</textarea>');
   expect(result.formatted).toContain('const value = "line";\n</script>');
-  expect(result.formatted).toMatch(/color: red\s*\n\s*}\s*\n\s*<\/style>/);
+  expect(result.formatted).toMatch(/\.a \{ color: red }\s*\n\s*<\/style>/);
   expect(result.twice).toBe(result.formatted);
 });
 
@@ -177,7 +248,7 @@ for (const trigger of ['button', 'Alt+Shift+f', 'Control+Alt+f']) {
     const read = () => page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
     await expect.poll(read).toContain('box-sizing: border-box');
     const formatted = await read();
-    expect(formatted).toMatch(/<style>\n\s+\* \{\n\s+box-sizing: border-box/);
+    expect(formatted).toMatch(/<style>\n\s+\* \{ box-sizing: border-box }/);
     expect(formatted).toContain('--max-width: 1200px;');
     expect(formatted).toContain('Keep   this\ttext\non its lines');
     await page.evaluate(async () => {
