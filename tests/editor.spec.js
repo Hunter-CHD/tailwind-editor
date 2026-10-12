@@ -337,9 +337,9 @@ test('export displays, copies, and downloads the same CSS and HTML fragment', as
   await expect(page.locator('#export-dialog')).toBeVisible();
   const output = await page.locator('#export-source').inputValue();
   expect(output).toMatch(/^<pre style="display:none"><style data-generated="tailwind-editor">/);
-  expect(output).toContain('padding: 2rem;');
+  expect(output).toContain('.p-8{padding:2rem}');
   expect(output).toContain('<section class="p-8"><h2>Reusable fragment</h2></section>');
-  expect(output).toMatch(/@scope[^\n]+\{\n  /);
+  expect(output).toMatch(/@scope[^{]+\{\s*\n[ \t]{2}\S/);
   expect(output).not.toMatch(/<!doctype|<\/?(?:html|head|body|title|meta)(?:\s|>)/i);
   await page.getByRole('button', { name: 'Copy CSS + HTML', exact: true }).click();
   expect(await page.evaluate(() => window.copiedExport)).toBe(output);
@@ -471,8 +471,8 @@ test('export-only transformations affect export and its CSS without changing sou
   await expect(page.locator('#export-dialog')).toBeVisible();
   const output = await page.locator('#export-source').inputValue();
   expect(output).not.toContain('Private note');
-  expect(output).toContain('padding: 3rem;');
-  expect(output).not.toContain('padding: 0.5rem;');
+  expect(output).toContain('.p-12{padding:3rem}');
+  expect(output).not.toMatch(/padding:0\.5rem;?}/);
   await expect(popup.frameLocator('iframe').locator('[editor-meta]')).toHaveText('Private note');
   expect(await page.evaluate(() => window.monaco.editor.getModels()[0].getValue())).toContain(
     'Private note',
@@ -518,6 +518,54 @@ test('document colors and a custom interface theme persist', async ({ page }) =>
     'rgb(255, 0, 0)',
   );
 });
+
+for (const command of ['editor.action.formatDocument', 'editor.action.formatSelection']) {
+  test(`${command} uses the text-preserving formatter registered with Monaco`, async ({ page }) => {
+    await openEditor(page);
+    const text = 'Keep   spaces\ttabs\nand  existing lines ' + 'long text '.repeat(30);
+    const source = `<section><p>${text}</p></section>`;
+    await setSource(page, source);
+    const formatted = await page.evaluate(async ({ command }) => {
+      const editor = window.monaco.editor.getEditors()[0];
+      const model = editor.getModel();
+      editor.setSelection(model.getFullModelRange());
+      editor.focus();
+      const defaults = window.monaco.languages.html.htmlDefaults;
+      await editor.getAction(command).run();
+      return { source: model.getValue(), configuration: defaults.modeConfiguration };
+    }, { command });
+    expect(formatted.configuration.documentFormattingEdits).toBe(false);
+    expect(formatted.configuration.documentRangeFormattingEdits).toBe(false);
+    expect(formatted.source).not.toBe(source);
+    expect(formatted.source).toContain(text);
+    await page.keyboard.press('Control+z');
+    await expect.poll(() => page.evaluate(() => window.monaco.editor.getModels()[0].getValue())).toBe(source);
+  });
+}
+
+for (const shortcut of ['Control+Alt+f', 'Alt+Shift+f']) {
+  test(`${shortcut} uses the same text-preserving formatter as the Format button`, async ({ page }) => {
+    await openEditor(page);
+    const text = 'Keep   these\tspaces\nand  existing lines ' + 'long text '.repeat(30);
+    const source = `<section><p>${text}</p><p>Second   paragraph</p></section>`;
+    await setSource(page, source);
+    await page.getByRole('button', { name: /Format/ }).click();
+    const readSource = () => page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+    await expect.poll(readSource).not.toBe(source);
+    const expected = await readSource();
+    expect(expected).toContain(text);
+    await setSource(page, source);
+    await page.evaluate(() => {
+      const editor = window.monaco.editor.getEditors()[0];
+      editor.setSelection(new window.monaco.Selection(1, 13, 1, 70));
+      editor.focus();
+    });
+    await page.keyboard.press(shortcut);
+    await expect.poll(readSource).toBe(expected);
+    await page.keyboard.press('Control+z');
+    await expect.poll(readSource).toBe(source);
+  });
+}
 
 test('formats HTML and manages separate documents', async ({ page }) => {
   await openEditor(page);
