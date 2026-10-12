@@ -21,6 +21,29 @@ export async function createEditor(container, settings, onChange) {
     await new Promise((resolve, reject) =>
       window.require(['vs/editor/editor.main'], resolve, reject),
     );
+    const { languages } = window.monaco;
+    const { htmlDefaults } = languages.html;
+    htmlDefaults.setModeConfiguration({
+      ...htmlDefaults.modeConfiguration,
+      documentFormattingEdits: false,
+      documentRangeFormattingEdits: false,
+    });
+    async function formattingEdits(model, range, token) {
+      const version = model.getVersionId();
+      const source = model.getValueInRange(range);
+      const text = await formatHtml(source);
+      if (token.isCancellationRequested || model.isDisposed() || model.getVersionId() !== version)
+        return [];
+      return text === source ? [] : [{ range, text }];
+    }
+    languages.registerDocumentFormattingEditProvider('html', {
+      provideDocumentFormattingEdits: (model, _options, token) =>
+        formattingEdits(model, model.getFullModelRange(), token),
+    });
+    languages.registerDocumentRangeFormattingEditProvider('html', {
+      provideDocumentRangeFormattingEdits: (model, range, _options, token) =>
+        formattingEdits(model, range, token),
+    });
     try {
       const { emmetHTML } = await import('https://cdn.jsdelivr.net/npm/emmet-monaco-es@5.7.0/+esm');
       emmetHTML(window.monaco);
@@ -244,29 +267,15 @@ export async function createEditor(container, settings, onChange) {
 }
 
 export async function formatCss(source) {
-  const [prettier, postcss] = await Promise.all([
-    import('https://cdn.jsdelivr.net/npm/prettier@3.5.3/standalone.mjs'),
-    import('https://cdn.jsdelivr.net/npm/prettier@3.5.3/plugins/postcss.mjs'),
-  ]);
-  return prettier.format(source, {
-    parser: 'css',
-    plugins: [postcss],
-    tabWidth: 2,
-    printWidth: 100,
-  });
+  const { formatExportCss } = await import('./Formatting.js');
+  return formatExportCss(source);
 }
 
 export async function formatHtml(source) {
-  const [prettier, html, postcss, babel, estree] = await Promise.all([
-    import('https://cdn.jsdelivr.net/npm/prettier@3.5.3/standalone.mjs'),
-    import('https://cdn.jsdelivr.net/npm/prettier@3.5.3/plugins/html.mjs'),
-    import('https://cdn.jsdelivr.net/npm/prettier@3.5.3/plugins/postcss.mjs'),
-    import('https://cdn.jsdelivr.net/npm/prettier@3.5.3/plugins/babel.mjs'),
-    import('https://cdn.jsdelivr.net/npm/prettier@3.5.3/plugins/estree.mjs'),
+  const [{ default: beautify }, { Parser }, { beautifyHtml }] = await Promise.all([
+    import('https://cdn.jsdelivr.net/npm/js-beautify@1.15.4/+esm'),
+    import('https://cdn.jsdelivr.net/npm/parse5@8.0.1/+esm'),
+    import('./Formatting.js'),
   ]);
-  return prettier.format(source, {
-    parser: 'html',
-    plugins: [html, postcss, babel, estree],
-    tabWidth: 2,
-  });
+  return beautifyHtml(source, beautify, Parser);
 }
