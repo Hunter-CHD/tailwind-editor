@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { format } from 'prettier';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('./');
@@ -16,6 +15,26 @@ async function exportSource(page, content, options = {}) {
     { content, options },
   );
 }
+
+test('generated export CSS uses one compact line per utility rule', async ({ page }) => {
+  const result = await exportSource(page,
+    '<section id="card"><div class="flex p-2 md:grid animate-spin">Copy</div></section>');
+  expect(result.css.split('\n')).toContain('  .flex{display:flex}');
+  expect(result.css.split('\n')).toContain('  .p-2{padding:0.5rem}');
+  expect(result.css).toMatch(/@media[^\n]*\{\n\s+\.md\\:grid\{[^\n}]*display:grid}/);
+  expect(result.css).toMatch(/@keyframes[^\n]*\{\n\s+[^\n]+\{[^\n]+}/);
+  expect(result.exportHtml).toContain(result.css.trimEnd());
+});
+
+test('export combines generated utilities sharing the same media query', async ({ page }) => {
+  const result = await exportSource(page,
+    '<section id="card"><div class="md:p-8 md:mx-auto md:text-4xl md:col-span-2">Copy</div></section>');
+  expect(result.css.match(/@media \(min-width:768px\)/g)).toHaveLength(1);
+  for (const selector of ['p-8', 'mx-auto', 'text-4xl', 'col-span-2']) {
+    expect(result.css).toContain(`.md\\:${selector}{`);
+  }
+  expect(result.exportHtml).toContain(result.css.trimEnd());
+});
 
 test('preview link handling preserves authored targets and base URLs without changing exports', async ({
   page,
@@ -106,9 +125,7 @@ test('scoped export styles descendants with arbitrary classes and variants while
     '<section id="123:card" class="p-8 sm:grid bg-[#abc123] hover:bg-brand"><div class="p-8 sm:grid bg-[#abc123] hover:bg-brand"><p class="w-1/2 p-2">Inside</p></div></section>',
     { colors: { brand: '#123456' } },
   );
-  expect(result.css).toBe(
-    await format(result.css, { parser: 'css', tabWidth: 2, printWidth: 100 }),
-  );
+  expect(result.css).toContain('.p-8{padding:2rem}');
   const host = await context.newPage();
   await host.setContent(
     `<div id="outside" class="p-8 sm:grid bg-[#abc123]"><p class="p-2">Outside</p></div>${result.exportHtml}`,
@@ -299,8 +316,8 @@ test('full-document exports format only generated CSS and preserve leading comme
   ).toBe(content);
   expect(result.exportHtml).not.toContain('@scope');
   expect(result.exportHtml).not.toContain('data-tw-scope');
-  expect(result.css).toContain('padding: 0.5rem;');
-  expect(result.css).toContain('html {');
+  expect(result.css).toMatch(/padding:0\.5rem;?}/);
+  expect(result.css).toContain('html{');
 });
 
 test('an edit while the CSS formatter loads rejects the stale export snapshot', async ({
@@ -314,7 +331,7 @@ test('an edit while the CSS formatter loads rejects the stale export snapshot', 
   const loading = new Promise((resolve) => {
     started = resolve;
   });
-  await page.route('**/prettier@3.5.3/plugins/postcss.mjs', async (route) => {
+  await page.route('**/app/Services/Formatting.js', async (route) => {
     started();
     await blocked;
     await route.continue();

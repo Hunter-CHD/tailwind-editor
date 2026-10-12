@@ -710,11 +710,18 @@ export async function start() {
       if (event.key.toLowerCase() === 's') persist();
       else if (!$('dialog[open]')) prepareExport().catch((error) => notify(error.message));
     }
-    if (event.altKey && event.shiftKey && event.key.toLowerCase() === 'f') {
-      event.preventDefault();
-      actions.format().catch((error) => notify(error.message));
-    }
   });
+  // Capture formatting shortcuts before Monaco's built-in formatter can run.
+  document.addEventListener('keydown', (event) => {
+    if (
+      (event.code !== 'KeyF' && event.key.toLowerCase() !== 'f') ||
+      !event.altKey ||
+      !(event.shiftKey || event.ctrlKey)
+    ) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!$('dialog[open]')) actions.format().catch((error) => notify(error.message));
+  }, { capture: true });
   window.addEventListener('beforeunload', (event) => {
     if (savedRevision !== saveRevision) {
       persist();

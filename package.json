@@ -5,11 +5,12 @@
   "scripts": {
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format": "node scripts/format.js",
+    "format:check": "node scripts/format.js --check"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "prettier": "^3.5.3"
+    "js-beautify": "1.15.4",
+    "parse5": "8.0.1"
   }
 }
