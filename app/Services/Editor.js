@@ -279,3 +279,13 @@ export async function formatHtml(source) {
   ]);
   return beautifyHtml(source, beautify, Parser);
 }
+
+export async function formatStyleContents(source) {
+  if (!/<style\b/i.test(source)) return source;
+  const [{ default: beautify }, { Parser }, { beautifyStyleContents }] = await Promise.all([
+    import('https://cdn.jsdelivr.net/npm/js-beautify@1.15.4/+esm'),
+    import('https://cdn.jsdelivr.net/npm/parse5@8.0.1/+esm'),
+    import('./Formatting.js'),
+  ]);
+  return beautifyStyleContents(source, beautify, Parser);
+}

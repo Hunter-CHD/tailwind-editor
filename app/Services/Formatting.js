@@ -6,7 +6,7 @@ export const cssFormatOptions = {
 
 // Generated CSS is already compact. Break between rules, preserving strings,
 // escaped selector characters, and declaration values as supplied by Twind.
-export function formatExportCss(source) {
+function cssBlocks(source, mergeMedia = false) {
   const root = {
     children: []
   };
@@ -17,9 +17,11 @@ export function formatExportCss(source) {
   let brackets = 0;
   let quote = '';
   let comment = false;
-  const emit = () => {
+  const emit = (end) => {
     if (chunk.trim()) groups.at(-1).children.push({
-      text: chunk.trim()
+      text: chunk.trim(),
+      start: end - chunk.trimStart().length,
+      end: end - (chunk.length - chunk.trimEnd().length)
     });
     chunk = '';
   };
@@ -62,7 +64,7 @@ export function formatExportCss(source) {
         const previous = children.at(-1);
         // Only adjacent identical media queries can merge without moving rules
         // past intervening CSS and changing which declaration wins.
-        let group = /^@media\b/i.test(header) && previous?.header === header ? previous : null;
+        let group = mergeMedia && /^@media\b/i.test(header) && previous?.header === header ? previous : null;
         if (!group) {
           group = {
             header,
@@ -75,15 +77,20 @@ export function formatExportCss(source) {
       } else ruleDepth++;
     } else if (character === '}') {
       if (ruleDepth) {
-        if (--ruleDepth === 0) emit();
+        if (--ruleDepth === 0) emit(index + 1);
       } else {
         chunk = chunk.slice(0, -1);
-        emit();
+        emit(index);
         if (groups.length > 1) groups.pop();
       }
-    } else if (character === ';' && !ruleDepth) emit();
+    } else if (character === ';' && !ruleDepth) emit(index + 1);
   }
-  emit();
+  emit(source.length);
+  return root;
+}
+
+export function formatExportCss(source) {
+  const root = cssBlocks(source, true);
   const lines = [];
 
   function print(children, indent) {
@@ -100,9 +107,91 @@ export function formatExportCss(source) {
   return lines.join('\n') + (lines.length ? '\n' : '');
 }
 
+// Fold formatter-inserted line breaks only outside CSS literals and comments.
+// Nested rules and multiline literals stay expanded.
+function singleLineRule(source) {
+  let result = '';
+  let quote = '';
+  let comment = false;
+  let depth = 0;
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (character === '\\') {
+      result += character + (source[++index] || '');
+      continue;
+    }
+    if (comment) {
+      result += character;
+      if (character === '*' && source[index + 1] === '/') {
+        result += source[++index];
+        comment = false;
+      }
+      continue;
+    }
+    if (quote) {
+      result += character;
+      if (character === quote) quote = '';
+      continue;
+    }
+    if (character === '/' && source[index + 1] === '*') {
+      result += character + source[++index];
+      comment = true;
+    } else if (character === '"' || character === "'") {
+      result += character;
+      quote = character;
+    } else if (character === '\n' || character === '\r') {
+      result += ' ';
+      if (character === '\r' && source[index + 1] === '\n') index++;
+      while (/[ \t]/.test(source[index + 1] || '') && index + 1 < source.length) index++;
+    } else {
+      if (character === '{' && ++depth > 1) return null;
+      if (character === '}') depth--;
+      result += character;
+    }
+  }
+  return /[\r\n]/.test(result) ? null : result;
+}
+
+export function formatAuthoredCss(source, beautify, {
+  printWidth = cssFormatOptions.wrap_line_length,
+  indent = ''
+} = {}) {
+  const formatted = beautify.css(source, {
+    ...cssFormatOptions,
+    wrap_line_length: 0
+  });
+  const edits = [];
+
+  function visit(children) {
+    for (const node of children) {
+      if (node.children) {
+        visit(node.children);
+        continue;
+      }
+      if (node.text.startsWith('@') || !node.text.includes('{')) continue;
+      const compact = singleLineRule(node.text);
+      const lineStart = formatted.lastIndexOf('\n', node.start - 1) + 1;
+      const indentation = formatted.slice(lineStart, node.start);
+      if (compact && indent.length + indentation.length + compact.length <= printWidth) {
+        edits.push({
+          start: node.start,
+          end: node.end,
+          text: compact
+        });
+      }
+    }
+  }
+  visit(cssBlocks(formatted).children);
+  let result = formatted;
+  for (const edit of edits.reverse()) {
+    result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
+  }
+  return result;
+}
+
 // Mask text before beautifying: disabling line wrapping alone still collapses
 // spaces and tabs. Source offsets retain entities and original line endings.
-export function beautifyHtml(source, beautify, Parser) {
+function htmlTextRanges(source, Parser) {
   const parser = Parser.getFragmentParser(null, {
     sourceCodeLocationInfo: true
   });
@@ -129,6 +218,34 @@ export function beautifyHtml(source, beautify, Parser) {
     };
   }
   parser.tokenizer.write(source, true);
+  return ranges;
+}
+
+export function beautifyStyleContents(source, beautify, Parser) {
+  let result = source;
+  for (const {
+      start,
+      end,
+      css
+    }
+    of htmlTextRanges(source, Parser).reverse()) {
+    if (!css) continue;
+    const text = source.slice(start, end);
+    const [, leading, content, trailing] = /^([\t\n\f\r ]*)([\s\S]*?)([\t\n\f\r ]*)$/.exec(text);
+    if (!content) continue;
+    const indent = leading.slice(leading.lastIndexOf('\n') + 1);
+    const styled = formatAuthoredCss(content, beautify, {
+      indent
+    }).trimEnd();
+    const replacement = leading + styled.split('\n').map((line, index) =>
+      index && line ? indent + line : line).join('\n') + trailing;
+    result = result.slice(0, start) + replacement + result.slice(end);
+  }
+  return result;
+}
+
+export function beautifyHtml(source, beautify, Parser) {
+  const ranges = htmlTextRanges(source, Parser);
   let prefix = 'EDITOR_TEXT_';
   while (source.includes(prefix)) prefix += '_';
   const texts = [];
@@ -146,7 +263,7 @@ export function beautifyHtml(source, beautify, Parser) {
       masked += source.slice(offset, start) + `${prefix}${texts.length}_END`;
       texts.push({
         css: true,
-        text: beautify.css(text, cssFormatOptions)
+        text
       });
       offset = end;
       continue;
@@ -190,6 +307,10 @@ export function beautifyHtml(source, beautify, Parser) {
     // Format CSS independently, including styles inside preserved <pre> wrappers.
     const line = aligned.slice(aligned.lastIndexOf('\n', position - 1) + 1, position);
     const indent = /^[ \t]*/.exec(line)[0];
-    return '\n' + text.split('\n').map((line) => line ? indent + '  ' + line : '').join('\n') + indent;
+    const cssIndent = indent + '  ';
+    const styled = formatAuthoredCss(text, beautify, {
+      indent: cssIndent
+    });
+    return '\n' + styled.split('\n').map((line) => line ? cssIndent + line : '').join('\n') + indent;
   });
 }

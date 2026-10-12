@@ -14,7 +14,7 @@ import {
 } from 'parse5';
 import {
   beautifyHtml,
-  cssFormatOptions
+  formatAuthoredCss
 } from '../app/Services/Formatting.js';
 
 const check = process.argv.includes('--check');
@@ -36,7 +36,7 @@ async function visit(path) {
     const formatted = extension === '.html' ?
       beautifyHtml(source, beautify, Parser) :
       extension === '.css' ?
-      beautify.css(source, cssFormatOptions) :
+      formatAuthoredCss(source, beautify) :
       beautify.js(source, {
         indent_size: 2,
         wrap_line_length: 0,
