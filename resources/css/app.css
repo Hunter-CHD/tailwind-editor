@@ -512,6 +512,12 @@ hr {
 .footer-dot {
   margin: 0 8px;
 }
+.workspace-footer #compile-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 dialog {
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100dvh - 48px);
@@ -778,20 +784,6 @@ dialog::backdrop {
   padding: 24px;
   background: var(--background);
   border-radius: 8px;
-}
-.notice {
-  position: fixed;
-  left: 50%;
-  bottom: 30px;
-  transform: translateX(-50%);
-  max-width: min(600px, 90vw);
-  padding: 13px 18px;
-  background: var(--text);
-  color: var(--surface);
-  border-radius: 8px;
-  box-shadow: 0 4px 24px #0002;
-  z-index: 20;
-  font-size: 12px;
 }
 .boot-message {
   margin: 12vh auto;
