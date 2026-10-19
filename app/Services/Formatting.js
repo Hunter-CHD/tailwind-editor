@@ -1,3 +1,5 @@
+import { htmlTextRanges } from './HtmlText.js';
+
 export const cssFormatOptions = {
   indent_size: 2,
   wrap_line_length: 100,
@@ -187,38 +189,6 @@ export function formatAuthoredCss(source, beautify, {
     result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
   }
   return result;
-}
-
-// Mask text before beautifying: disabling line wrapping alone still collapses
-// spaces and tabs. Source offsets retain entities and original line endings.
-function htmlTextRanges(source, Parser) {
-  const parser = Parser.getFragmentParser(null, {
-    sourceCodeLocationInfo: true
-  });
-  const ranges = [];
-  for (const name of ['onCharacter', 'onWhitespaceCharacter', 'onNullCharacter']) {
-    const handle = parser[name].bind(parser);
-    parser[name] = (token) => {
-      const location = token.location;
-      const element = parser.openElements.current;
-      const type = element?.attrs?.find((attribute) => attribute.name === 'type')?.value;
-      const css = element?.tagName === 'style' && (!type || type.trim().toLowerCase() === 'text/css');
-      const preserve = parser.openElements.items.slice(0, parser.openElements.stackTop + 1).some((node) => ['pre', 'textarea', 'script', 'style', 'xmp', 'plaintext', 'listing'].includes(node.tagName));
-      if (location) {
-        const previous = ranges.at(-1);
-        if (previous?.end === location.startOffset && previous.css === css) previous.end = location.endOffset;
-        else ranges.push({
-          start: location.startOffset,
-          end: location.endOffset,
-          css,
-          preserve
-        });
-      }
-      handle(token);
-    };
-  }
-  parser.tokenizer.write(source, true);
-  return ranges;
 }
 
 export function beautifyStyleContents(source, beautify, Parser) {

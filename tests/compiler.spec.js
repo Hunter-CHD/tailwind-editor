@@ -16,6 +16,148 @@ async function exportSource(page, content, options = {}) {
   );
 }
 
+test('children variant groups style direct children in preview and export', async ({ page, context }) => {
+  const result = await page.evaluate(async () => {
+    const { compile, compileExport } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const document = newDocument('Children.html',
+      '<section id="children-test"><div class="children:(border my-2)"><p>First <em>nested</em></p><p>Second</p></div></section>');
+    return { preview: compile(document), exported: await compileExport(document) };
+  });
+  const host = await context.newPage();
+  for (const html of [result.preview.html, result.preview.exportHtml, result.exported.exportHtml]) {
+    await host.setContent(html);
+    await expect(host.locator('div > p').first()).toHaveCSS('border-top-width', '1px');
+    await expect(host.locator('div > p').first()).toHaveCSS('margin-top', '8px');
+    await expect(host.locator('div > p').last()).toHaveCSS('margin-bottom', '8px');
+    await expect(host.locator('em')).toHaveCSS('border-top-width', '0px');
+    await expect(host.locator('em')).toHaveCSS('margin-top', '0px');
+    await expect(host.locator('div')).toHaveCSS('border-top-width', '0px');
+  }
+});
+
+test('inline @apply uses document utilities and preserves declaration order in preview and exports', async ({ page, context }) => {
+  const result = await page.evaluate(async () => {
+    const { compile, compileExport } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const content = `<style>
+      /* Keep this comment and fallback declarations. */
+      .card { padding: 1px; @apply p-4 bg-brand rounded-lg; padding-left: 7px; }
+      .ordered { @apply p-2; padding: 3px; @apply px-4; }
+      @media (min-width: 600px) { .card { @apply mt-2; } }
+      .strong { @apply text-brand !important; color: blue; }
+    </style><section id="apply-root"><div class="card ordered strong">Applied</div></section>`;
+    const document = { ...newDocument('Apply.html', content), preflight: false, colors: { brand: '#123456' } };
+    return { preview: compile(document), exported: await compileExport(document), content: document.content };
+  });
+  expect(result.content).toContain('@apply p-4');
+  expect(result.preview.html).toContain('Keep this comment');
+  const host = await context.newPage();
+  for (const html of [result.preview.html, result.preview.exportHtml, result.exported.exportHtml]) {
+    expect(html).not.toContain('@apply');
+    await host.setContent(html);
+    const card = host.locator('.card');
+    await expect(card).toHaveCSS('padding-top', '3px');
+    await expect(card).toHaveCSS('padding-left', '16px');
+    await expect(card).toHaveCSS('border-radius', '8px');
+    await expect(card).toHaveCSS('background-color', 'rgb(18, 52, 86)');
+    await expect(card).toHaveCSS('color', 'rgb(18, 52, 86)');
+    await expect(card).toHaveCSS('margin-top', '8px');
+    await host.setViewportSize({ width: 500, height: 800 });
+    await expect(card).toHaveCSS('margin-top', '0px');
+    await host.setViewportSize({ width: 1440, height: 1000 });
+  }
+});
+
+test('inline @apply supports grouped variants, animation dependencies, and full documents', async ({ page, context }) => {
+  const result = await page.evaluate(async () => {
+    const { compile, compileExport } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const document = newDocument('Variants.html', `<!doctype html><html><head><style>
+      .card { @apply children:(my-2 p-2) hover:bg-red-500 md:p-4; }
+      .spin { @apply animate-spin ring-2 ring-red-500 w-[123px]; }
+    </style></head><body><div class="card"><p>Child</p></div><div class="spin">Spin</div></body></html>`);
+    document.preflight = false;
+    return { preview: compile(document), exported: await compileExport(document) };
+  });
+  const host = await context.newPage();
+  for (const html of [result.preview.html, result.exported.exportHtml]) {
+    await host.setContent(html);
+    await expect(host.locator('.card')).toHaveCSS('padding-top', '16px');
+    await expect(host.locator('p')).toHaveCSS('padding-top', '8px');
+    await expect(host.locator('p')).toHaveCSS('margin-top', '8px');
+    await host.locator('.card').hover();
+    await expect(host.locator('.card')).toHaveCSS('background-color', 'rgb(239, 68, 68)');
+    expect(await host.locator('.spin').evaluate((element) => element.getAnimations().length)).toBe(1);
+    await expect(host.locator('.spin')).toHaveCSS('width', '123px');
+    await expect(host.locator('.spin')).not.toHaveCSS('box-shadow', 'none');
+    await host.setViewportSize({ width: 500, height: 800 });
+    await expect(host.locator('.card')).toHaveCSS('padding-top', '0px');
+    await host.setViewportSize({ width: 1440, height: 1000 });
+  }
+});
+
+test('inline @apply leaves scripts, comments, non-CSS styles, and untouched CSS intact', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { compile } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const source = `<!-- <style>.fake { @apply p-4; }</style> -->
+<script type="text/plain"><style>.fake { @apply p-4; }</style></script>
+<style type="text/less">.less { @apply p-4; }</style>
+<style>.literal::after { content: "@apply p-4;"; } /* @apply p-4; */</style>
+<style>.keep { color: red; }</style>
+<style type="text/css" media="screen">.actual { @apply p-2; }</style>
+<section><div class="actual">Text &amp; spaces   stay</div></section>`;
+    const compiled = compile(newDocument('Preserved.html', source));
+    const markup = compiled.exportHtml.slice(compiled.exportHtml.indexOf('</style></pre>') + '</style></pre>\n\n'.length);
+    return { source, markup };
+  });
+  expect(result.markup).toContain(result.source.slice(0, result.source.indexOf('<style type="text/css"')));
+  expect(result.markup).toContain('media="screen"');
+  expect(result.markup).not.toContain('.actual { @apply');
+  expect(result.markup).toContain('Text &amp; spaces   stay');
+});
+
+test('incomplete inline @apply CSS rejects compilation and recovers after completion', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { compile } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const errors = [];
+    for (const css of ['.card { @apply p-4;', '.card { @apply; }', '@apply p-4;']) {
+      try { compile(newDocument('Invalid.html', `<style>${css}</style><p>Copy</p>`)); }
+      catch (error) { errors.push(error.message); }
+    }
+    const recovered = compile(newDocument('Ready.html', '<style>.card { @apply p-4; }</style><p class="card">Copy</p>'));
+    return { errors, html: recovered.html };
+  });
+  expect(result.errors).toHaveLength(3);
+  expect(result.html).toContain('padding:1rem');
+  expect(result.html).not.toContain('@apply');
+});
+
+test('inline CSS diagnostics use the full HTML source line and column', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { compile } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const errors = [];
+    for (const source of [
+      '<!-- Heading -->\n<section>\n<style>.ok { color: red; }</style>\n<style>\n.card {\n  @apply;\n}\n</style></section>',
+      '<section>\n<style>@apply p-4;</style></section>',
+      '<section>\n<style>\n.card {\n  content\n}\n</style></section>',
+    ]) {
+      try { compile(newDocument('Error.html', source)); }
+      catch (error) { errors.push({ message: error.message, line: error.line, column: error.column }); }
+    }
+    return errors;
+  });
+  expect(result).toHaveLength(3);
+  expect(result[0]).toMatchObject({ line: 6, column: 3 });
+  expect(result[0].message).toContain('CSS error at line 6, column 3:');
+  expect(result[1]).toMatchObject({ line: 2, column: 8 });
+  expect(result[2]).toMatchObject({ line: 4, column: 3 });
+  expect(result[2].message).toContain('Unknown word content');
+});
+
 test('generated export CSS uses one compact line per utility rule', async ({ page }) => {
   const result = await exportSource(page,
     '<section id="card"><div class="flex p-2 md:grid animate-spin">Copy</div></section>');
@@ -348,7 +490,7 @@ test('an edit while the CSS formatter loads rejects the stale export snapshot', 
     window.monaco.editor.getModels()[0].setValue('<h1>Changed during formatting</h1>'),
   );
   release();
-  await expect(page.locator('#notice')).toContainText('document changed while preparing export');
+  await expect(page.locator('#compile-status')).toContainText('document changed while preparing export');
   await expect(page.locator('#export-dialog')).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Export', exact: true }).click();

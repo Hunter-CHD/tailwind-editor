@@ -107,7 +107,7 @@ export function bindTransformations({ workspace, save, refresh, run, notify, dow
           changed();
           render();
         } catch (error) {
-          notify(error.message);
+          notify(error);
         }
       });
       list.append(card);

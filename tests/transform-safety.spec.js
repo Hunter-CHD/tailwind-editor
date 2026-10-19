@@ -65,6 +65,20 @@ async function current(page, fallback = false) {
   );
 }
 
+test('CSS parser errors stay inline when worker boundaries strip error metadata', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Transformations', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Transformation trigger' }).selectOption('manual');
+  const code = page.getByRole('textbox', { name: 'Transformation code', exact: true });
+  await code.fill('throw new Error("<css input>:28:18: Unknown word .arrow-link");');
+  await page.getByRole('button', { name: 'Run once', exact: true }).click();
+  await expect(page.locator('#compile-status')).toContainText('Unknown word .arrow-link');
+  await expect(page.locator('#notice')).toHaveCount(0);
+  await code.fill('throw new Error("ordinary action failure");');
+  await page.getByRole('button', { name: 'Run once', exact: true }).click();
+  await expect(page.locator('#compile-status')).toContainText('ordinary action failure');
+});
+
 for (const fallback of [false, true]) {
   test(`${fallback ? 'plain-text' : 'Monaco'} editing protects valid empty attributes through line changes within the same tag`, async ({
     page,
@@ -153,11 +167,11 @@ test('incomplete HTML pauses every stage, preserves the preview, and still saves
   await expect(page.locator('#compile-status')).toContainText('Transforms paused');
   await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.getByRole('button', { name: 'Export', exact: true }).click();
-  await expect(page.locator('#notice')).toContainText('Transforms paused');
+  await expect(page.locator('#compile-status')).toContainText('Transforms paused');
   await expect(page.locator('#export-dialog')).not.toBeVisible();
   await page.getByRole('button', { name: 'Transformations', exact: true }).click();
   await page.getByRole('button', { name: 'Run once', exact: true }).first().click();
-  await expect(page.locator('#notice')).toContainText('Transforms paused');
+  await expect(page.locator('#compile-status')).toContainText('Transforms paused');
   expect(workers).toEqual([]);
   expect(await page.locator('#preview').getAttribute('srcdoc')).toBe(preview);
   expect(
@@ -245,6 +259,6 @@ test('stale transformations cannot overwrite typing and invalid output cannot re
     .getByRole('textbox', { name: 'Transformation code', exact: true })
     .fill('return "<div class=\\\"";');
   await page.getByRole('button', { name: 'Run once', exact: true }).click();
-  await expect(page.locator('#notice')).toContainText('Transforms paused');
+  await expect(page.locator('#compile-status')).toContainText('Transforms paused');
   expect(await current(page)).toBe('<p>After typed</p>\n<p>Next</p>');
 });

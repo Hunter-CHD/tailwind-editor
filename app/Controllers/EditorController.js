@@ -17,7 +17,6 @@ const size = (text) => `${(new Blob([text]).size / 1024).toFixed(1)} KB`;
 
 export async function start() {
   let workspace;
-  let noticeTimer;
   let saveTimer;
   let renderTimer;
   let saveChain = Promise.resolve();
@@ -27,6 +26,8 @@ export async function start() {
   let renderRevision = 0;
   let pendingEditorTransforms = false;
   let editingBoundary = false;
+  let pendingRenderError = false;
+  let renderErrorMessage;
   let inspectedSource;
   let inspection;
   let exportResult;
@@ -65,6 +66,7 @@ export async function start() {
   applySidebarState();
   const activeDocument = () => workspace.documents.find((item) => item.id === workspace.activeId);
   const editor = await createEditor($('#editor'), workspace.settings, (content) => {
+    clearRenderError();
     activeDocument().content = content;
     pendingEditorTransforms = true;
     editingBoundary = false;
@@ -75,9 +77,14 @@ export async function start() {
   const themeColorPicker = bindThemeColorPicker($('#custom-theme-form'), $('#theme-color-picker'));
   editor.onEditingBoundary((reason) => {
     editingBoundary = true;
-    if (pendingEditorTransforms && (hasAutomaticEditorTransforms() || reason === 'compositionend'))
+    if (pendingRenderError ||
+      (pendingEditorTransforms && (hasAutomaticEditorTransforms() || reason === 'compositionend')))
       refresh();
   });
+
+  function canFinishEditing(state = editor.getEditingState()) {
+    return !state.composing && (!state.focused || editingBoundary);
+  }
 
   function hasAutomaticEditorTransforms() {
     return workspace.transformations.some(
@@ -118,12 +125,15 @@ export async function start() {
   }
 
   function notify(message) {
-    clearTimeout(noticeTimer);
-    $('#notice').textContent = message;
-    $('#notice').hidden = false;
-    noticeTimer = setTimeout(() => {
-      $('#notice').hidden = true;
-    }, 6500);
+    const text = typeof message === 'string' ? message : message?.message || String(message);
+    // Preserve editing-boundary handling for CSS errors from shared actions.
+    if (message?.code === 'INLINE_CSS_ERROR' || message?.name === 'CssSyntaxError' ||
+      /(?:^|:\s*)<css input>:\d+:\d+:/.test(text)) {
+      reportError(new Error(text));
+      return;
+    }
+    $('#compile-status').textContent = text;
+    $('#compile-status').title = text;
   }
 
   function save() {
@@ -161,6 +171,7 @@ export async function start() {
   }
 
   function refresh() {
+    $('#compile-status').title = '';
     renderRevision++;
     clearTimeout(renderTimer);
     $('#compile-status').textContent = 'Updating preview…';
@@ -176,14 +187,27 @@ export async function start() {
   }
 
   function reportError(error) {
+    if (!canFinishEditing()) {
+      pendingRenderError = true;
+      $('#compile-status').textContent = 'Preview waiting for a safe editing boundary';
+      return;
+    }
+    pendingRenderError = false;
     if (error.message.startsWith('HTML syntax check')) {
       $('#html-status').textContent = 'HTML check unavailable';
       $('#html-status').dataset.state = 'invalid';
       $('#html-status').title = error.message;
     }
-    $('#compile-status').textContent = 'Preview not updated · transformation or compilation error';
+    $('#compile-status').textContent = `Preview not updated · ${error.message}`;
+    $('#compile-status').title = error.message;
+    renderErrorMessage = error.message;
     $('#transform-log').textContent = error.message;
-    notify(error.message);
+  }
+
+  function clearRenderError() {
+    if (renderErrorMessage && $('#transform-log').textContent === renderErrorMessage)
+      $('#transform-log').textContent = '';
+    renderErrorMessage = undefined;
   }
 
   async function transform(code, transformations, stage, name) {
@@ -195,7 +219,7 @@ export async function start() {
   async function applyPendingEditorTransforms(document, revision, syntax) {
     const state = editor.getEditingState();
     const shouldApplyEditor =
-      pendingEditorTransforms && !state.composing && (!state.focused || editingBoundary);
+      pendingEditorTransforms && canFinishEditing(state);
     if (shouldApplyEditor) {
       const transforms = workspace.transformations.filter(
         (item) => item.enabled && item.mode === 'auto' && item.target === 'editor',
@@ -229,6 +253,7 @@ export async function start() {
 
   async function render(extraTransforms = []) {
     clearTimeout(renderTimer);
+    pendingRenderError = false;
     const revision = ++renderRevision;
     const document = structuredClone(activeDocument());
     const syntax = await inspect(document.content);
@@ -263,6 +288,8 @@ export async function start() {
   }
 
   function showPreview(result) {
+    clearRenderError();
+    $('#compile-status').title = '';
     $('#preview').srcdoc = result.html;
     updatePopout(result.html);
     $('#css-size').textContent = size(result.css);
@@ -344,9 +371,11 @@ export async function start() {
   }
 
   function openDocument(id) {
+    clearRenderError();
     workspace.activeId = id;
     pendingEditorTransforms = false;
     editingBoundary = false;
+    pendingRenderError = false;
     editor.setValue(activeDocument().content);
     renderDocuments();
     save();
@@ -641,7 +670,7 @@ export async function start() {
     try {
       await action();
     } catch (error) {
-      notify(error.message);
+      notify(error);
     } finally {
       button.disabled = false;
     }
@@ -689,7 +718,7 @@ export async function start() {
       refresh();
       $('#document-settings-dialog').close();
     } catch (error) {
-      notify(error.message);
+      notify(error);
     }
   });
   $('#file-input').addEventListener('change', async (event) => {
@@ -708,7 +737,7 @@ export async function start() {
     if ((event.ctrlKey || event.metaKey) && ['e', 's'].includes(event.key.toLowerCase())) {
       event.preventDefault();
       if (event.key.toLowerCase() === 's') persist();
-      else if (!$('dialog[open]')) prepareExport().catch((error) => notify(error.message));
+      else if (!$('dialog[open]')) prepareExport().catch(notify);
     }
   });
   // Capture formatting shortcuts before Monaco's built-in formatter can run.
@@ -720,7 +749,7 @@ export async function start() {
     ) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (!$('dialog[open]')) actions.format().catch((error) => notify(error.message));
+    if (!$('dialog[open]')) actions.format().catch(notify);
   }, { capture: true });
   window.addEventListener('beforeunload', (event) => {
     if (savedRevision !== saveRevision) {
