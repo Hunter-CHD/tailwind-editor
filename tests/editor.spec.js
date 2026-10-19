@@ -11,6 +11,100 @@ async function setSource(page, source) {
   await expect(page.locator('#compile-status')).toContainText('Live preview');
 }
 
+for (const fallback of [false, true]) {
+  for (const boundary of ['line change', 'blur']) {
+    test(`${fallback ? 'plain-text' : 'Monaco'} preview errors wait for ${boundary} and discard corrected errors`, async ({ page }) => {
+      if (fallback)
+        await page.route('**/monaco-editor@0.45.0/min/vs/loader.js', (route) => route.abort());
+      await page.goto('./');
+      await expect(page.locator('#compile-status')).toContainText('Live preview');
+      await expect(page.locator('#notice')).toHaveCount(0);
+      if (!fallback) await page.waitForFunction(() => window.monaco?.editor.getModels().length > 0);
+      const valid = '<style>.card { @apply p-4; }</style>\n<p class="card">Keep preview</p>';
+      const invalid = valid.replace('; }', ';');
+      const edit = (value) => page.evaluate(({ fallback, value }) => {
+        if (fallback) {
+          const input = document.querySelector('.source-fallback');
+          input.focus();
+          input.setSelectionRange(1, 1);
+          input.dispatchEvent(new Event('select'));
+          input.value = value;
+          input.setSelectionRange(1, 1);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('select'));
+        } else {
+          const editor = window.monaco.editor.getEditors()[0];
+          editor.focus();
+          editor.setPosition({ lineNumber: 1, column: 2 });
+          editor.getModel().setValue(value);
+        }
+      }, { fallback, value });
+      const finish = () => page.evaluate(({ fallback, boundary }) => {
+        if (boundary === 'blur') document.activeElement.blur();
+        else if (fallback) {
+          const input = document.querySelector('.source-fallback');
+          const offset = input.value.indexOf('\n') + 1;
+          input.setSelectionRange(offset, offset);
+          input.dispatchEvent(new Event('select'));
+        } else window.monaco.editor.getEditors()[0].setPosition({ lineNumber: 2, column: 2 });
+      }, { fallback, boundary });
+
+      await edit(invalid);
+      await expect(page.locator('#compile-status')).toContainText('waiting for a safe editing boundary');
+      await expect(page.locator('#notice')).toHaveCount(0);
+      await expect(page.locator('#transform-log')).toBeEmpty();
+      await edit(valid);
+      await expect(page.locator('#compile-status')).toContainText('Live preview');
+      await finish();
+      await expect(page.locator('#notice')).toHaveCount(0);
+
+      await edit(invalid);
+      await expect(page.locator('#compile-status')).toContainText('waiting for a safe editing boundary');
+      await expect(page.locator('#notice')).toHaveCount(0);
+      await finish();
+      await expect(page.locator('#compile-status')).toContainText('Preview not updated');
+      await expect(page.locator('#compile-status')).toContainText('Unclosed block');
+      await expect(page.locator('#compile-status')).toBeVisible();
+      await expect(page.locator('#transform-log')).toContainText('Unclosed block');
+      await expect(page.locator('#notice')).toHaveCount(0);
+      await expect(page.frameLocator('#preview').getByText('Keep preview')).toHaveCSS('padding-top', '16px');
+      await edit(valid);
+      await expect(page.locator('#transform-log')).toBeEmpty();
+      await expect(page.locator('#compile-status')).toContainText('Live preview');
+    });
+  }
+}
+
+test('inline @apply keeps authored source and the last successful preview during incomplete CSS', async ({ page }) => {
+  await openEditor(page);
+  const source = '<style>.card { @apply p-4 bg-red-500; }</style><section><p class="card">Applied CSS</p></section>';
+  await setSource(page, source);
+  const preview = page.frameLocator('#preview').getByText('Applied CSS');
+  await expect(preview).toHaveCSS('padding-top', '16px');
+  expect(await page.evaluate(() => window.monaco.editor.getModels()[0].getValue())).toBe(source);
+  await page.evaluate((value) => window.monaco.editor.getModels()[0].setValue(value), source.replace('; }', ';'));
+  await expect(page.locator('#compile-status')).toContainText('Preview not updated');
+  await expect(preview).toHaveCSS('padding-top', '16px');
+  await setSource(page, source.replace('p-4', 'p-2'));
+  await expect(preview).toHaveCSS('padding-top', '8px');
+});
+
+test('@apply validation errors remain inline when export reaches the shared action error handler', async ({ page }) => {
+  await openEditor(page);
+  await page.evaluate(() => {
+    window.monaco.editor.getModels()[0].setValue('<style>\n@apply p-4;\n</style><p>Invalid apply placement</p>');
+  });
+  await expect(page.locator('#compile-status')).toContainText('@apply requires utilities inside a CSS rule');
+  await expect(page.locator('#notice')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
+  await expect(page.locator('#notice')).toHaveCount(0);
+  await expect(page.locator('#compile-status')).toContainText('@apply requires utilities inside a CSS rule');
+  await expect(page.locator('#export-dialog')).not.toBeVisible();
+  await page.keyboard.press('Control+e');
+  await expect(page.locator('#notice')).toHaveCount(0);
+});
+
 async function configureEditorTransform(page, mode) {
   await page.evaluate(async (mode) => {
     const { loadWorkspace, saveWorkspace } = await import('./app/Models/Workspace.js');
@@ -276,7 +370,7 @@ test('a blocked popout leaves the inline preview and editor split available', as
     window.open = () => null;
   });
   await page.getByRole('button', { name: 'Open preview in a new tab', exact: true }).click();
-  await expect(page.locator('#notice')).toContainText('Allow popups');
+  await expect(page.locator('#compile-status')).toContainText('Allow popups');
   await expect(page.locator('.preview-pane')).toBeVisible();
   await expect(page.locator('#splitter')).toBeVisible();
   await expect(page.locator('#focus-preview')).toBeHidden();
@@ -512,7 +606,7 @@ test('document colors and a custom interface theme persist', async ({ page }) =>
     .locator('#document-settings-dialog')
     .getByRole('button', { name: 'Save settings', exact: true })
     .click();
-  await expect(page.locator('#notice')).toHaveText('Colors must be a JSON object.');
+  await expect(page.locator('#compile-status')).toHaveText('Colors must be a JSON object.');
   await expect(page.locator('#document-settings-dialog')).toBeVisible();
   await page
     .locator('#palette-json')
