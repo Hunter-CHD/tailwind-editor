@@ -244,9 +244,8 @@ test('fragment compilation omits document preflight rules from preview and expor
     expect(css).toMatch(/box-sizing:\s*border-box/);
     expect(css).toMatch(/padding:\s*0\.5rem/);
   }
-  for (const html of [result.preview.html, result.exported.exportHtml]) {
-    expect(html).toContain('<style>html { color: red; } body { padding: 19px; }</style>');
-  }
+  expect(result.preview.html).toContain('<style>html { color: red; } body { padding: 19px; }</style>');
+  expect(result.exported.exportHtml).toContain('<style>html { color: red; }\n\nbody { padding: 19px; }</style>');
 });
 
 test('authored html and body wrappers retain document preflight rules', async ({ page }) => {
@@ -301,11 +300,11 @@ test('wrapper selectors escape classes, use a tag fallback, and preserve ignored
   ]) {
     const result = await exportSource(page, content);
     expect(result.css).toContain(`@scope (${selector})`);
-    expect(result.exportHtml).toContain(`</style></pre>\n\n${content}`);
+    expect(result.exportHtml).toContain(`</style></pre>\n\n${content.replace('pre{color:red}', 'pre { color: red }')}`);
   }
 });
 
-test('full-document exports format only generated CSS and preserve leading comments and authored assets', async ({
+test('full-document exports format CSS and preserve leading comments and authored assets', async ({
   page,
 }) => {
   const content =
@@ -313,11 +312,18 @@ test('full-document exports format only generated CSS and preserve leading comme
   const result = await exportSource(page, content, { preflight: true });
   expect(
     result.exportHtml.replace(/<style data-generated="tailwind-editor">[\s\S]*?<\/style>\n/, ''),
-  ).toBe(content);
+  ).toBe(content.replace('.custom{color:red}', '.custom { color: red }'));
   expect(result.exportHtml).not.toContain('@scope');
   expect(result.exportHtml).not.toContain('data-tw-scope');
   expect(result.css).toMatch(/padding:0\.5rem;?}/);
   expect(result.css).toContain('html{');
+});
+
+test('export compacts short authored rules while preserving source and surrounding HTML', async ({ page }) => {
+  const content = '<!-- Keep --><style>\n    img {\n      min-width: 0\n    }\n</style><p>Keep   text\non two lines</p><script>const value = "a   b";</script><style type="text/less">@value:  red;</style>';
+  const result = await exportSource(page, content);
+  const exported = result.exportHtml.slice(result.exportHtml.indexOf('</style></pre>') + '</style></pre>\n\n'.length);
+  expect(exported).toBe(content.replace('img {\n      min-width: 0\n    }', 'img { min-width: 0 }'));
 });
 
 test('an edit while the CSS formatter loads rejects the stale export snapshot', async ({

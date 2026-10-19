@@ -351,6 +351,20 @@ test('export displays, copies, and downloads the same CSS and HTML fragment', as
   expect(Buffer.concat(chunks).toString('utf8')).toBe(output);
 });
 
+test('export dialog compacts authored CSS with Windows line endings without changing source', async ({ page }) => {
+  await openEditor(page);
+  const source = '<style>\r\n    img {\r\n      min-width: 0\r\n    }\r\n    @media(min-width:768px){\r\n      .card{display:flex;gap:1rem;}\r\n    }\r\n</style><section><img alt="Example"><p>Keep   this\r\ntext</p></section>';
+  await setSource(page, source);
+  const before = await page.evaluate(() => window.monaco.editor.getModels()[0].getValue());
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(page.locator('#export-dialog')).toBeVisible();
+  const output = await page.locator('#export-source').inputValue();
+  expect(output).toContain('    img { min-width: 0 }\n');
+  expect(output).toContain('.card { display: flex; gap: 1rem; }');
+  expect(output).toContain('Keep   this\ntext');
+  expect(await page.evaluate(() => window.monaco.editor.getModels()[0].getValue())).toBe(before);
+});
+
 test('export preserves manually entered boilerplate, assets, and fragment-only elements', async ({
   page,
 }) => {

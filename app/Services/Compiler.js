@@ -1,7 +1,7 @@
 import { twind, virtual, consume, stringify } from '@twind/core';
 import presetTailwind from '@twind/preset-tailwind';
 import presetAutoprefix from '@twind/preset-autoprefix';
-import { formatCss } from './Editor.js';
+import { formatCss, formatStyleContents } from './Editor.js';
 
 export function compile(document, content = document.content) {
   const { markup, exportContext, ...result } = compileSource(document, content);
@@ -11,8 +11,9 @@ export function compile(document, content = document.content) {
 
 export async function compileExport(document, content = document.content) {
   const { markup, exportContext, ...result } = compileSource(document, content);
-  const output = prepareExport(markup, result.css, exportContext);
-  const css = await formatCss(output.css);
+  const css = await formatCss(prepareExport(markup, result.css, exportContext).css);
+  const authoredMarkup = await formatStyleContents(markup);
+  const output = prepareExport(authoredMarkup, result.css, exportContext);
   return { ...result, css, exportHtml: output.before + generatedStyle(css) + output.after };
 }
 
