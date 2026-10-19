@@ -1,7 +1,12 @@
 import { twind, virtual, consume, stringify } from '@twind/core';
 import presetTailwind from '@twind/preset-tailwind';
 import presetAutoprefix from '@twind/preset-autoprefix';
+import presetExt from '@twind/preset-ext';
 import { formatCss, formatStyleContents } from './Editor.js';
+
+// Optional CSS tooling must not prevent the workspace from opening or saving
+// source when a CDN dependency is unavailable. Reloading retries the import.
+const inlineCss = await import('./InlineCss.js').catch(() => null);
 
 export function compile(document, content = document.content) {
   const { markup, exportContext, ...result } = compileSource(document, content);
@@ -24,7 +29,7 @@ function generatedStyle(css) {
 
 function compileSource(document, content) {
   const config = {
-    presets: [presetAutoprefix(), presetTailwind()],
+    presets: [presetAutoprefix(), presetTailwind(), presetExt()],
     preflight: document.preflight,
     hash: false,
     theme: { extend: { colors: document.colors } },
@@ -33,7 +38,10 @@ function compileSource(document, content) {
 
   try {
     engine(document.safelist);
-    const markup = consume(content, engine);
+    if (!inlineCss && /@apply\b/i.test(content)) {
+      throw new Error('Inline CSS compiler could not load. Check your connection and reload to retry @apply.');
+    }
+    const markup = consume(inlineCss ? inlineCss.compileInlineCss(content, config) : content, engine);
     const parsed = new DOMParser().parseFromString(markup, 'text/html');
     const exportContext = inspectExport(markup, parsed);
     const includeDocumentRules = ['html', 'body'].includes(exportContext.wrapperTag);
