@@ -1,4 +1,5 @@
 import { newWorkspace, newDocument, themes } from '../../config/editor.js';
+import { validateTailwindBaseSize } from '../Services/TailwindUnits.js';
 
 const stores = ['workspaces', 'documentFiles', 'documentMetadata', 'transformations'];
 const colorPattern = /^#[0-9a-f]{6}$/i;
@@ -151,12 +152,13 @@ async function writeWorkspace(workspace) {
       return { id, name, content, hash: cached.hash };
     }),
   );
-  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight }) => ({
+  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize }) => ({
     id,
     name,
     colors,
     safelist,
     preflight,
+    tailwindBaseSize: validateTailwindBaseSize(tailwindBaseSize),
   }));
   const workspaceMetadata = {
     version: workspace.version,
@@ -275,6 +277,7 @@ export function validateWorkspace(value) {
     };
     document.safelist = typeof item.safelist === 'string' ? item.safelist : '';
     document.preflight = item.preflight !== false;
+    document.tailwindBaseSize = validateTailwindBaseSize(item.tailwindBaseSize);
     if (item.colors) document.colors = validateColors(item.colors);
     return document;
   });
