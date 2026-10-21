@@ -236,9 +236,12 @@ export function validateTransformations(items, { preserveIds = false } = {}) {
       name: item.name,
       code: item.code,
       enabled: item.enabled === true,
-      mode: item.mode === 'auto' ? 'auto' : 'manual',
-      target: ['preview', 'export'].includes(item.target) ? item.target : 'editor',
-      kind: item.kind === 'dom' ? 'dom' : 'string',
+      mode: item.kind === 'comment' || item.mode === 'auto' ? 'auto' : 'manual',
+      target: item.kind === 'comment'
+        ? item.target === 'editor' ? 'editor' : 'preview'
+        : ['preview', 'export'].includes(item.target) ? item.target : 'editor',
+      kind: ['dom', 'comment'].includes(item.kind) ? item.kind : 'string',
+      ...(item.kind === 'comment' ? { command: String(item.command || '').trim() } : {}),
     };
   });
   if (new Set(transformations.map((item) => item.id)).size !== transformations.length)
