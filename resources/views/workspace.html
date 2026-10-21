@@ -360,6 +360,25 @@
     <label class="checkbox-label"
       ><input id="preflight" type="checkbox" /> Include Tailwind base styles (Preflight)</label
     >
+    <label class="checkbox-label"
+      ><input id="override-tailwind-base" type="checkbox" /> Override Tailwind base size</label
+    >
+    <label for="tailwind-base-size">Tailwind base size (px)</label>
+    <input
+      id="tailwind-base-size"
+      type="number"
+      min="0.01"
+      step="any"
+      value="16"
+      required
+      disabled
+      aria-describedby="tailwind-base-help"
+    />
+    <p id="tailwind-base-help" class="subtle">
+      Sets what 1rem means for generated Tailwind utilities, including @apply. A base of 16px keeps
+      utility sizes independent of the client site's root font size. Handwritten CSS and inherited
+      text sizes keep their normal behavior.
+    </p>
     <label for="safelist">Additional classes</label
     ><textarea
       id="safelist"
