@@ -145,6 +145,35 @@ document.querySelectorAll('a[target="_blank"]').forEach((link) => {
 
 Consecutive DOM transforms receive the **same document object**. The pipeline parses lazily on the first DOM transform and serializes at the end. For export, automatic preview and export-only transforms share one pipeline, so they also share the DOM. A serialized checkpoint before the export-only stage refreshes the live preview without reparsing or rerunning transforms. Fragment input remains a fragment; complete documents retain their document structure.
 
+### Comment commands
+
+Select **Comment command** and set **Command prefix** to a name such as `accumulate`. Names are case-sensitive and use letters, digits, underscores, and hyphens, starting with a letter or underscore. Invoke it with an HTML comment:
+
+```html
+<!-- accumulate: h2; -->
+```
+
+The handler receives `args` (the text between `:` and the first `;`, trimmed at the edges) and `elements` (an array of all following direct sibling elements through the end of the comment's parent). Descendants stay inside those elements. It also receives `nodes` (the same range including text and comments), `comment`, `document`, and `context`. These arrays are snapshots, so moving nodes does not skip later siblings. Edit the DOM directly and do not return a value.
+
+For example, this handler wraps each `h2` and its following content until the next `h2`, preserving text and whitespace:
+
+```js
+const parent = comment.parentElement;
+let wrapper;
+for (const node of nodes) {
+  if (node.nodeType === 1 && node.matches(args)) {
+    if (wrapper) wrapper.append(document.createTextNode('\n'));
+    wrapper = document.createElement('div');
+    wrapper.append(document.createTextNode('\n'));
+    parent.insertBefore(wrapper, node);
+  }
+  if (wrapper) wrapper.append(node);
+}
+if (wrapper) wrapper.append(document.createTextNode('\n'));
+```
+
+Each matching comment runs once per handler pass, in document order, and is removed after success. Unknown prefixes, missing terminators, and comments with non-whitespace after `;` remain untouched. A later command uses its current siblings after earlier mutations; commands detached by earlier handlers are skipped. Newly inserted command comments wait for a later handler pass. Enabled command transforms always run automatically in list order, sharing the document with adjacent DOM transforms. Choose **Editor** to run each calling comment once and consume it in source, using the same safe editing boundaries as other automatic editor transforms. Choose **Preview + export** to run on each preview/export render and remove the comment from that output while preserving it in the editor. Comment commands have no manual trigger, Run once button, or Export only stage. Existing saved/imported manual commands become automatic; export-only commands become Preview + export. If multiple transforms use the same prefix, the first consumes the comments. Any handler failure rejects the entire pipeline, including comment removal.
+
 ### String input
 
 Legacy transforms still receive `code` and must return a string:
@@ -155,7 +184,7 @@ return code.replaceAll('“', '"').replaceAll('”', '"');
 
 When mixing types, serialization/parsing happens only at a DOM ↔ string boundary. For maximum efficiency, group DOM transforms together. Convert old code by removing the `DOMParser` setup and final serialization, then using the supplied `document` variable. The legacy global `DOMParser` remains available.
 
-Both inputs receive a read-only `context` with `name` and `stage` (`editor`, `preview`, or `export`). Both support `await`; the execution timeout still applies.
+All inputs receive a read-only `context` with `name` and `stage` (`editor`, `preview`, or `export`). All support `await`; the execution timeout still applies.
 
 Workers use [LinkeDOM](https://github.com/WebReflection/linkedom), giving transforms DOM queries and mutations without blocking typing. It is a DOM implementation, not a rendered browser: layout measurements, browser globals, and some native DOM behavior are unavailable. String-only transforms can run without using a DOM. A pipeline has a three-second execution limit after dependencies load, and rejects the entire result if any transform fails. Slow/infinite loops are terminated along with their worker. No partial result from that pipeline is applied. Workers isolate execution from the UI thread; they are not a security boundary for untrusted JavaScript. Run only code you trust.
 
