@@ -6,6 +6,7 @@ import {
   validateColors,
 } from '../Models/Workspace.js';
 import { compile, compileExport } from '../Services/Compiler.js';
+import { validateTailwindBaseSize } from '../Services/TailwindUnits.js';
 import { createEditor, formatHtml } from '../Services/Editor.js';
 import { runTransformations } from '../Services/Transformations.js';
 import { inspectHtml, affectsEditingRegion } from '../Services/Html.js';
@@ -606,6 +607,9 @@ export async function start() {
     'document-settings': () => {
       $('#document-settings-name').textContent = activeDocument().name;
       $('#preflight').checked = activeDocument().preflight;
+      $('#override-tailwind-base').checked = activeDocument().tailwindBaseSize != null;
+      $('#tailwind-base-size').disabled = !$('#override-tailwind-base').checked;
+      $('#tailwind-base-size').value = activeDocument().tailwindBaseSize ?? 16;
       $('#safelist').value = activeDocument().safelist;
       $('#palette-json').value = JSON.stringify(activeDocument().colors, null, 2);
       $('#document-settings-dialog').showModal();
@@ -704,6 +708,9 @@ export async function start() {
     applyTheme();
     $('#settings-dialog').close();
   });
+  $('#override-tailwind-base').addEventListener('change', (event) => {
+    $('#tailwind-base-size').disabled = !event.target.checked;
+  });
   $('#document-settings-form').addEventListener('submit', (event) => {
     event.preventDefault();
     try {
@@ -711,7 +718,11 @@ export async function start() {
       if (!colors || Array.isArray(colors) || typeof colors !== 'object')
         throw new Error('Colors must be a JSON object.');
       const validatedColors = validateColors(colors);
+      const tailwindBaseSize = validateTailwindBaseSize(
+        $('#override-tailwind-base').checked ? $('#tailwind-base-size').valueAsNumber : null,
+      );
       activeDocument().colors = validatedColors;
+      activeDocument().tailwindBaseSize = tailwindBaseSize;
       activeDocument().preflight = $('#preflight').checked;
       activeDocument().safelist = $('#safelist').value;
       save();
