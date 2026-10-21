@@ -3,6 +3,7 @@ import presetTailwind from '@twind/preset-tailwind';
 import presetAutoprefix from '@twind/preset-autoprefix';
 import presetExt from '@twind/preset-ext';
 import { formatCss, formatStyleContents } from './Editor.js';
+import { validateTailwindBaseSize, useTailwindBaseSize } from './TailwindUnits.js';
 
 // Optional CSS tooling must not prevent the workspace from opening or saving
 // source when a CDN dependency is unavailable. Reloading retries the import.
@@ -11,7 +12,11 @@ const inlineCss = await import('./InlineCss.js').catch(() => null);
 export function compile(document, content = document.content) {
   const { markup, exportContext, ...result } = compileSource(document, content);
   const output = prepareExport(markup, result.css, exportContext);
-  return { ...result, exportHtml: output.before + generatedStyle(output.css) + output.after };
+  return {
+    ...result,
+    css: baseSizeRule(exportContext.selector, exportContext.tailwindBaseSize) + result.css,
+    exportHtml: output.before + generatedStyle(output.css) + output.after,
+  };
 }
 
 export async function compileExport(document, content = document.content) {
@@ -28,11 +33,13 @@ function generatedStyle(css) {
 }
 
 function compileSource(document, content) {
+  const tailwindBaseSize = validateTailwindBaseSize(document.tailwindBaseSize);
   const config = {
     presets: [presetAutoprefix(), presetTailwind(), presetExt()],
     preflight: document.preflight,
     hash: false,
     theme: { extend: { colors: document.colors } },
+    finalize: tailwindBaseSize === null ? [] : [useTailwindBaseSize],
   };
   const engine = twind(config, virtual());
 
@@ -43,7 +50,7 @@ function compileSource(document, content) {
     }
     const markup = consume(inlineCss ? inlineCss.compileInlineCss(content, config) : content, engine);
     const parsed = new DOMParser().parseFromString(markup, 'text/html');
-    const exportContext = inspectExport(markup, parsed);
+    const exportContext = { ...inspectExport(markup, parsed), tailwindBaseSize };
     const includeDocumentRules = ['html', 'body'].includes(exportContext.wrapperTag);
     // Twind's virtual sheet stores each generated rule separately. Filter the
     // document preflight rules without touching utility values or authored CSS.
@@ -52,7 +59,8 @@ function compileSource(document, content) {
         ? engine.target
         : engine.target.filter((rule) => !/^(?:html|body)\{/.test(rule)),
     );
-    const safeCss = css.replace(/<\/style/gi, '<\\/style');
+    const safeCss = (baseSizeRule(exportContext.selector, tailwindBaseSize) + css)
+      .replace(/<\/style/gi, '<\\/style');
     if (!parsed.documentElement.lang) parsed.documentElement.lang = 'en';
     if (!parsed.querySelector('meta[charset]')) {
       const charset = parsed.createElement('meta');
@@ -155,14 +163,22 @@ function inspectExport(markup, parsed) {
   return { isFullDocument, documentStart, selector, wrapperTag: wrapper?.localName };
 }
 
-function prepareExport(markup, css, { isFullDocument, documentStart, selector }) {
+function baseSizeRule(selector, size) {
+  return size == null ? '' : `${selector}{--twe-rem:${size}px}\n`;
+}
+
+function prepareExport(markup, css, { isFullDocument, documentStart, selector, tailwindBaseSize }) {
   if (isFullDocument) {
     const headEnd = /<\/head\s*>/i.exec(markup);
     const index = headEnd ? headEnd.index : documentStart.length;
-    return { css, before: markup.slice(0, index), after: `\n${markup.slice(index)}` };
+    return {
+      css: baseSizeRule(selector, tailwindBaseSize) + css,
+      before: markup.slice(0, index),
+      after: `\n${markup.slice(index)}`,
+    };
   }
   return {
-    css: `@scope (${selector}) {\n${css}\n}`,
+    css: `@scope (${selector}) {\n${baseSizeRule(':scope', tailwindBaseSize)}${css}\n}`,
     before: '<pre style="display:none">',
     after: `</pre>\n\n${markup}`,
   };

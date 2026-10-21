@@ -74,6 +74,7 @@ export function newDocument(name = 'Untitled.html', content = '', theme = themes
     colors: themeColors(theme),
     safelist: '',
     preflight: true,
+    tailwindBaseSize: null,
   };
 }
 
