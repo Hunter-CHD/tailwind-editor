@@ -5,6 +5,29 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./preview.html');
 });
 
+test('Tailwind base size survives storage and backups with legacy defaults and validation', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace, newDocument } = await import('./config/editor.js');
+    const { validateWorkspace, saveWorkspace, loadWorkspace } = await import('./app/Models/Workspace.js');
+    const workspace = newWorkspace();
+    delete workspace.documents[0].tailwindBaseSize;
+    workspace.documents.push({ ...newDocument('Fixed.html'), tailwindBaseSize: 18.5 });
+    const validated = validateWorkspace(JSON.parse(JSON.stringify(workspace)));
+    await saveWorkspace(validated);
+    const { workspace: loaded } = await loadWorkspace();
+    const invalid = [0, -1, '16', NaN, Infinity, 0.001].map((value) => {
+      try {
+        validateWorkspace({ ...workspace, documents: [{ ...workspace.documents[0], tailwindBaseSize: value }] });
+        return false;
+      } catch { return true; }
+    });
+    return { validated, loaded, invalid };
+  });
+  expect(result.validated.documents.map((document) => document.tailwindBaseSize)).toEqual([null, 18.5]);
+  expect(result.loaded).toEqual(result.validated);
+  expect(result.invalid).toEqual([true, true, true, true, true, true]);
+});
+
 test('missing document palettes use the workspace theme while saved palettes remain independent', async ({
   page,
 }) => {
@@ -121,6 +144,7 @@ test('documents are HTML Files with linked metadata and only changed records are
       colors: document.colors,
       safelist: document.safelist,
       preflight: document.preflight,
+      tailwindBaseSize: document.tailwindBaseSize,
     });
   }
   await instrumentWrites(page);

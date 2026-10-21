@@ -16,6 +16,97 @@ async function exportSource(page, content, options = {}) {
   );
 }
 
+test('Tailwind base size isolates generated utilities and @apply from host rem sizing', async ({ page, context }) => {
+  const result = await page.evaluate(async () => {
+    const { compile, compileExport } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const content = `<style>
+      .authored { padding: 1rem; font-size: 1.5rem; }
+      .applied { margin: 1rem; @apply p-4 rounded-lg text-xl md:px-8; }
+    </style><section id="fixed-base" style="padding: 16px">
+      <div class="utility p-4 -mt-2 rounded-lg text-xl w-[20rem] md:p-8">Utility</div>
+      <div class="applied">Applied</div><div class="authored">Authored</div>
+      <span class="inherited">Inherited</span>
+      <div class="expression w-[calc(100%_-_2rem)]">Expression</div>
+      <div class="grid gap-2"><span>Gap 2</span></div>
+      <div class="grid gap-4"><span>Gap 4</span></div>
+      <div class="grid gap-6"><span>Gap 6</span></div>
+      <div class="grid gap-8"><span>Gap 8</span></div>
+    </section>`;
+    const document = { ...newDocument('Units.html', content), preflight: false, tailwindBaseSize: 16 };
+    return { preview: compile(document), exported: await compileExport(document) };
+  });
+  const host = await context.newPage();
+  for (const html of [result.preview.html, result.preview.exportHtml, result.exported.exportHtml]) {
+    await host.setContent(html);
+    await host.addStyleTag({ content: 'html { font-size: 10px; } body { font-size: 13px; }' });
+    await expect(host.locator('html')).toHaveCSS('font-size', '10px');
+    await expect(host.locator('#fixed-base')).toHaveCSS('padding-top', '16px');
+    await expect(host.locator('.utility')).toHaveCSS('padding-top', '32px');
+    await expect(host.locator('.utility')).toHaveCSS('font-size', '20px');
+    await expect(host.locator('.utility')).toHaveCSS('line-height', '28px');
+    await expect(host.locator('.utility')).toHaveCSS('margin-top', '-8px');
+    await expect(host.locator('.utility')).toHaveCSS('width', '320px');
+    await expect(host.locator('.utility')).toHaveCSS('border-radius', '8px');
+    await expect(host.locator('.applied')).toHaveCSS('padding-left', '32px');
+    await expect(host.locator('.applied')).toHaveCSS('font-size', '20px');
+    await expect(host.locator('.applied')).toHaveCSS('margin-top', '10px');
+    await expect(host.locator('.authored')).toHaveCSS('padding-top', '10px');
+    await expect(host.locator('.authored')).toHaveCSS('font-size', '15px');
+    await expect(host.locator('.inherited')).toHaveCSS('font-size', '13px');
+    for (const [utility, expected] of [['gap-2', '8px'], ['gap-4', '16px'], ['gap-6', '24px'], ['gap-8', '32px']])
+      await expect(host.locator(`.${utility}`)).toHaveCSS('gap', expected);
+    const widths = await host.evaluate(() => ({
+      parent: document.querySelector('#fixed-base').clientWidth - 32,
+      child: document.querySelector('.expression').getBoundingClientRect().width,
+    }));
+    expect(widths.child).toBeCloseTo(widths.parent - 32, 1);
+    await host.setViewportSize({ width: 500, height: 800 });
+    await expect(host.locator('.utility')).toHaveCSS('padding-top', '16px');
+    await expect(host.locator('.applied')).toHaveCSS('padding-left', '16px');
+    await host.setViewportSize({ width: 1440, height: 1000 });
+  }
+});
+
+test('Tailwind base size supports full documents, custom bases, and independent fragments', async ({ page, context }) => {
+  const outputs = await page.evaluate(async () => {
+    const { compileExport } = await import('./app/Services/Compiler.js');
+    const { newDocument } = await import('./config/editor.js');
+    const compile = (content, tailwindBaseSize) => compileExport({
+      ...newDocument('Units.html', content), preflight: false, tailwindBaseSize,
+    });
+    return Promise.all([
+      compile('<section id="base-18"><p class="p-4 text-base">18</p></section>', 18),
+      compile('<section id="base-20"><p class="p-4 text-base">20</p></section>', 20),
+      compile('<section id="default-base"><p class="p-4">Default</p></section>', null),
+      compile('<!doctype html><html><head></head><body><p class="p-4 text-base">Full</p></body></html>', 18),
+    ]);
+  });
+  const host = await context.newPage();
+  await host.setContent('<style>html { font-size: 10px; }</style>' + outputs.slice(0, 3).map((output) => output.exportHtml).join('\n'));
+  await expect(host.locator('#base-18 p')).toHaveCSS('padding-top', '18px');
+  await expect(host.locator('#base-18 p')).toHaveCSS('font-size', '18px');
+  await expect(host.locator('#base-20 p')).toHaveCSS('padding-top', '20px');
+  await expect(host.locator('#default-base p')).toHaveCSS('padding-top', '10px');
+  expect(outputs[2].css).not.toContain('--twe-rem');
+  await host.setContent(outputs[3].exportHtml);
+  await host.addStyleTag({ content: 'html { font-size: 10px; }' });
+  await expect(host.locator('p')).toHaveCSS('padding-top', '18px');
+  await expect(host.locator('p')).toHaveCSS('font-size', '18px');
+});
+
+test('Tailwind unit conversion preserves strings, URLs, identifiers, and other units', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { useTailwindBaseSize } = await import('./app/Services/TailwindUnits.js');
+    return useTailwindBaseSize({
+      r: ['@media (min-width: 40rem)'],
+      d: 'content:"1rem";background:url(/images/2rem.svg);--size-1rem:2rem;width:calc(100% - .5rem);height:1e1rem;margin:-1.5rem;border:1px;line-height:1.5;letter-spacing:.1em;/* 3rem */',
+    });
+  });
+  expect(result.r).toEqual(['@media (min-width: 40rem)']);
+  expect(result.d).toBe('content:"1rem";background:url(/images/2rem.svg);--size-1rem:calc(2 * var(--twe-rem));width:calc(100% - calc(0.5 * var(--twe-rem)));height:calc(10 * var(--twe-rem));margin:calc(-1.5 * var(--twe-rem));border:1px;line-height:1.5;letter-spacing:.1em;/* 3rem */');
+});
+
 test('children variant groups style direct children in preview and export', async ({ page, context }) => {
   const result = await page.evaluate(async () => {
     const { compile, compileExport } = await import('./app/Services/Compiler.js');

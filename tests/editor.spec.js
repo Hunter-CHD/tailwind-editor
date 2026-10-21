@@ -698,6 +698,43 @@ test('formats HTML and manages separate documents', async ({ page }) => {
   await expect(page.frameLocator('#preview').locator('h1')).toHaveText('Hello');
 });
 
+test('Tailwind base size settings update preview and export and survive duplication and reload', async ({ page }) => {
+  await openEditor(page);
+  await setSource(page, '<section id="unit-settings" class="p-4 text-base">Fixed sizing</section>');
+  const gear = page.getByRole('button', { name: 'Document settings', exact: true });
+  const settings = page.locator('#document-settings-dialog');
+  const toggle = settings.getByLabel('Override Tailwind base size');
+  const size = settings.getByLabel('Tailwind base size (px)');
+  const save = settings.getByRole('button', { name: 'Save settings', exact: true });
+  await gear.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(size).toBeDisabled();
+  await expect(size).toHaveValue('16');
+  await toggle.check();
+  await size.fill('18');
+  await save.click();
+  await expect(page.frameLocator('#preview').locator('#unit-settings')).toHaveCSS('padding-top', '18px');
+  await page.getByRole('button', { name: 'Export', exact: false }).first().click();
+  await expect(page.locator('#export-source')).toHaveValue(/--twe-rem:\s*18px/);
+  await page.locator('#export-dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
+  await gear.click();
+  await expect(toggle).toBeChecked();
+  await expect(size).toHaveValue('18');
+  await toggle.uncheck();
+  await save.click();
+  await expect(page.frameLocator('#preview').locator('#unit-settings')).toHaveCSS('padding-top', '16px');
+  await page.reload();
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+  await gear.click();
+  await expect(toggle).not.toBeChecked();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('#document-list button').filter({ hasText: 'Welcome.html' }).click();
+  await gear.click();
+  await expect(toggle).toBeChecked();
+  await expect(size).toHaveValue('18');
+});
+
 test('document settings stay with each document and separate from workspace preferences', async ({
   page,
 }) => {
