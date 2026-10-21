@@ -20,7 +20,7 @@ self.onmessage = async ({ data: { code, transformations, context, checkpointAfte
         ...context,
         stage: transform.target || context.stage,
       });
-      if (transform.kind === 'dom') {
+      if (transform.kind === 'dom' || transform.kind === 'comment') {
         if (!document) {
           fullDocument = /<!doctype\s|<html[\s>]/i.test(code);
           document = fullDocument
@@ -28,16 +28,44 @@ self.onmessage = async ({ data: { code, transformations, context, checkpointAfte
             : parseHTML('<!doctype html><html><head></head><body></body></html>').document;
           if (!fullDocument) document.body.innerHTML = code;
         }
-        const execute = new AsyncFunction(
-          'document',
-          'context',
-          `"use strict";\n${transform.code}`,
-        );
-        const returned = await execute(document, transformContext);
-        if (returned !== undefined)
-          throw new Error(
-            'DOM transforms edit document directly and must not return a value. Use String mode to return HTML.',
+        if (transform.kind === 'comment') {
+          const command = (transform.command || '').trim();
+          if (!/^[a-zA-Z_][\w-]*$/.test(command))
+            throw new Error('Comment commands need a prefix using letters, numbers, underscores, or hyphens, starting with a letter or underscore');
+          const execute = new AsyncFunction(
+            'args', 'elements', 'document', 'context', 'comment', 'nodes',
+            `"use strict";\n${transform.code}`,
           );
+          // Collect before mutating: moving siblings must not disrupt comment traversal.
+          const walker = document.createTreeWalker(document, 128);
+          const commands = [];
+          while (walker.nextNode()) {
+            const comment = walker.currentNode;
+            const match = comment.textContent.match(/^\s*([a-zA-Z_][\w-]*)\s*:([^;]*);\s*$/);
+            if (match?.[1] === command) commands.push({ comment, args: match[2].trim() });
+          }
+          for (const { comment, args } of commands) {
+            if (!document.contains(comment) || !comment.parentElement) continue;
+            const nodes = [];
+            for (let node = comment.nextSibling; node; node = node.nextSibling) nodes.push(node);
+            const elements = nodes.filter((node) => node.nodeType === 1);
+            const returned = await execute(args, elements, document, transformContext, comment, nodes);
+            if (returned !== undefined)
+              throw new Error('Comment commands edit elements directly and must not return a value');
+            comment.remove();
+          }
+        } else {
+          const execute = new AsyncFunction(
+            'document',
+            'context',
+            `"use strict";\n${transform.code}`,
+          );
+          const returned = await execute(document, transformContext);
+          if (returned !== undefined)
+            throw new Error(
+              'DOM transforms edit document directly and must not return a value. Use String mode to return HTML.',
+            );
+        }
       } else {
         if (document) {
           code = serialize();
