@@ -147,10 +147,10 @@ Consecutive DOM transforms receive the **same document object**. The pipeline pa
 
 ### Comment commands
 
-Select **Comment command** and set **Command prefix** to a name such as `accumulate`. Names are case-sensitive and use letters, digits, underscores, and hyphens, starting with a letter or underscore. Invoke it with an HTML comment:
+Select **Comment command** and set **Command prefix** to a name such as `command`. Names are case-sensitive and use letters, digits, underscores, and hyphens, starting with a letter or underscore. Invoke it with an HTML comment:
 
 ```html
-<!-- accumulate: h2; -->
+<!-- command: [args]; -->
 ```
 
 The handler receives `args` (the text between `:` and the first `;`, trimmed at the edges) and `elements` (an array of all following direct sibling elements through the end of the comment's parent). Descendants stay inside those elements. It also receives `nodes` (the same range including text and comments), `comment`, `document`, and `context`. These arrays are snapshots, so moving nodes does not skip later siblings. Edit the DOM directly and do not return a value.
