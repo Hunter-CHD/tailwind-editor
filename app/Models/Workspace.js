@@ -1,4 +1,4 @@
-import { newWorkspace, newDocument, themes } from '../../config/editor.js';
+import { newWorkspace, newDocument, documentName, themes } from '../../config/editor.js';
 import { validateTailwindBaseSize } from '../Services/TailwindUnits.js';
 
 const stores = ['workspaces', 'documentFiles', 'documentMetadata', 'transformations'];
@@ -151,7 +151,7 @@ async function writeWorkspace(workspace) {
         };
         contentHashes.set(id, cached);
       }
-      return { id, name, content, hash: cached.hash };
+      return { id, name: `${documentName(name)}.html`, content, hash: cached.hash };
     }),
   );
   const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize, folderId, lastOpenedAt }) => ({

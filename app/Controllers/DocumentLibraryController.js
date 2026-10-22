@@ -91,7 +91,7 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
       const remove = button('Delete', () => {
         if (!confirm(`Delete "${item.name}" from this workspace?`)) return;
         workspace.documents = workspace.documents.filter((document) => document.id !== item.id);
-        if (!workspace.documents.length) createDocument('Untitled.html');
+        if (!workspace.documents.length) createDocument('Untitled');
         else if (workspace.activeId === item.id) openDocument(recentDocuments(workspace)[0].id);
         changed();
         $('#library-search').focus();
@@ -147,14 +147,14 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
       selectedFolder = folder.id;
       $('#library-search').value = '';
       changed();
-    }, { extension: false });
+    }, { folder: true });
   });
   $('#library-rename-folder').addEventListener('click', () => {
     const folder = workspace.folders.find((item) => item.id === selectedFolder);
     askName('Rename folder', folder.name, (name) => {
       folder.name = name;
       changed();
-    }, { extension: false });
+    }, { folder: true });
   });
   $('#library-delete-folder').addEventListener('click', () => {
     const folder = workspace.folders.find((item) => item.id === selectedFolder);
@@ -166,7 +166,7 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
     $('#library-search').focus();
   });
   $('#library-new-document').addEventListener('click', () => {
-    askName('New document', 'Untitled.html', (name) => {
+    askName('New document', 'Untitled', (name) => {
       const folderId = workspace.folders.some((item) => item.id === selectedFolder) ? selectedFolder : null;
       createDocument(name, folderId);
       dialog.close();

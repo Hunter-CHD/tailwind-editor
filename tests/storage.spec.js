@@ -5,6 +5,29 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./preview.html');
 });
 
+test('legacy document names become extensionless while stored HTML Files keep their extension', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace, newDocument } = await import('./config/editor.js');
+    const { validateWorkspace, saveWorkspace, loadWorkspace } = await import('./app/Models/Workspace.js');
+    const workspace = newWorkspace();
+    workspace.documents[0].name = 'Existing.HTML';
+    workspace.documents.push({ ...newDocument(), name: 'Imported.htm', content: '<p>Keep me</p>' });
+    workspace.folders = [{ id: 'folder', name: 'Folder.html' }];
+    workspace.documents[1].folderId = 'folder';
+    const backup = validateWorkspace(JSON.parse(JSON.stringify(workspace)));
+    await saveWorkspace(workspace);
+    const { workspace: loaded } = await loadWorkspace();
+    await saveWorkspace(loaded);
+    return { backup, loaded, defaultName: newDocument().name };
+  });
+  expect(result.defaultName).toBe('Untitled');
+  expect(result.loaded.documents.map(({ name }) => name)).toEqual(['Existing', 'Imported']);
+  expect(result.loaded.documents[1]).toMatchObject({ content: '<p>Keep me</p>', folderId: 'folder' });
+  expect(result.loaded.folders[0].name).toBe('Folder.html');
+  expect(result.backup).toEqual(result.loaded);
+  expect((await storedRecords(page)).files.map(({ name }) => name).sort()).toEqual(['Existing.html', 'Imported.html']);
+});
+
 test('folders and recent history survive storage and backups with legacy defaults', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const { newWorkspace } = await import('./config/editor.js');
@@ -161,7 +184,7 @@ test('documents are HTML Files with linked metadata and only changed records are
     expect(records.files.find((item) => item.id === document.id)).toEqual({
       id: document.id,
       isFile: true,
-      name: document.name,
+      name: `${document.name}.html`,
       type: 'text/html;charset=utf-8',
       content: document.content,
     });
@@ -192,7 +215,7 @@ test('documents are HTML Files with linked metadata and only changed records are
     workspace.settings.fontSize = 18;
     await saveWorkspace(workspace);
     const settings = window.storageWrites.splice(0);
-    workspace.documents[0].name = 'Renamed.html';
+    workspace.documents[0].name = 'Renamed';
     await saveWorkspace(workspace);
     return { unchanged, source, metadata, settings, rename: window.storageWrites.splice(0) };
   });
@@ -216,7 +239,7 @@ test('documents are HTML Files with linked metadata and only changed records are
     async () => (await (await import('./app/Models/Workspace.js')).loadWorkspace()).workspace,
   );
   expect(loaded.documents[0]).toMatchObject({
-    name: 'Renamed.html',
+    name: 'Renamed',
     content: '<p>Edited</p>',
     preflight: false,
     safelist: 'hidden',

@@ -1,4 +1,4 @@
-import { newDocument, newWorkspace, themes, themeColors } from '../../config/editor.js';
+import { newDocument, newWorkspace, documentName, themes, themeColors } from '../../config/editor.js';
 import {
   loadWorkspace,
   saveWorkspace,
@@ -35,7 +35,7 @@ export async function start() {
   let exportResult;
   let exportName;
   let nameAction;
-  let nameExtension = true;
+  let namingFolder = false;
   let fileHandler;
   let previewWindow;
   let previewReady = false;
@@ -387,10 +387,10 @@ export async function start() {
     refresh();
   }
 
-  function askName(title, initial, action, { extension = true } = {}) {
+  function askName(title, initial, action, { folder = false } = {}) {
     nameAction = action;
-    nameExtension = extension;
-    $('#name-label').textContent = extension ? 'File name' : 'Folder name';
+    namingFolder = folder;
+    $('#name-label').textContent = folder ? 'Folder name' : 'Document name';
     $('#name-title').textContent = title;
     $('#name-input').value = initial;
     $('#name-dialog').showModal();
@@ -572,7 +572,7 @@ export async function start() {
       save();
     },
     new: () =>
-      askName('New document', 'Untitled.html', (name) => {
+      askName('New document', 'Untitled', (name) => {
         createDocument(name);
       }),
     rename: () =>
@@ -584,7 +584,7 @@ export async function start() {
     duplicate: () => {
       const copy = structuredClone(activeDocument());
       copy.id = crypto.randomUUID();
-      copy.name = copy.name.replace(/\.html?$/i, '') + ' copy.html';
+      copy.name = `${copy.name} copy`;
       workspace.documents.push(copy);
       openDocument(copy.id);
     },
@@ -592,7 +592,7 @@ export async function start() {
       if (!confirm(`Delete "${activeDocument().name}" from this workspace?`)) return;
       workspace.documents = workspace.documents.filter((item) => item.id !== workspace.activeId);
       if (!workspace.documents.length)
-        workspace.documents.push(newDocument('Untitled.html', '', getTheme()));
+        workspace.documents.push(newDocument('Untitled', '', getTheme()));
       openDocument(workspace.documents[0].id);
     },
     'import-html': () =>
@@ -703,7 +703,7 @@ export async function start() {
       $('#name-input').focus();
       return;
     }
-    nameAction(!nameExtension || /\.html?$/i.test(name) ? name : `${name}.html`);
+    nameAction(namingFolder ? name : documentName(name));
     $('#name-dialog').close();
   });
   $('#custom-theme-form').addEventListener('submit', (event) => {

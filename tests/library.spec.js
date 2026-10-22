@@ -24,7 +24,7 @@ for (const mobile of [false, true]) {
     if (mobile) await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
     await expect(page.locator('#document-list button')).toHaveCount(6);
-    await expect(page.locator('#document-list button').first()).toContainText('Document 8.html');
+    await expect(page.locator('#document-list button').first()).toContainText('Document 8');
     await page.locator('[data-action="library"]').click();
     const library = page.locator('#library-dialog');
     await expect(library).toBeVisible();
@@ -33,7 +33,7 @@ for (const mobile of [false, true]) {
     await expect(page.locator('#library-search-note')).toBeEmpty();
     await page.locator('#library-search').fill('Markting');
     await expect(page.locator('#library-results li')).toHaveCount(1);
-    await expect(page.locator('#library-results')).toContainText('Marketing.html');
+    await expect(page.locator('#library-results')).toContainText('Marketing');
     await page.locator('#library-search').fill('nothing-like-this');
     await expect(page.locator('#library-empty')).toContainText('No matching documents');
     await page.locator('#library-search').fill('');
@@ -47,7 +47,7 @@ for (const mobile of [false, true]) {
     await page.getByLabel('Folder name', { exact: true }).fill('Landing pages');
     await page.locator('#name-form button[type="submit"]').click();
     await page.locator('#library-folders button').filter({ hasText: 'All documents' }).click();
-    const marketing = page.locator('#library-results li').filter({ hasText: 'Marketing.html' });
+    const marketing = page.locator('#library-results li').filter({ hasText: 'Marketing' });
     await marketing.getByRole('combobox').selectOption({ label: 'Landing pages' });
     await page.locator('#library-search').fill('Landing pages');
     await expect(page.locator('#library-results li')).toHaveCount(1);
@@ -65,11 +65,11 @@ for (const mobile of [false, true]) {
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
     await marketing.locator('.library-document-open').click();
     await expect(library).not.toBeVisible();
-    await expect(page.locator('#document-list button').first()).toContainText('Marketing.html');
+    await expect(page.locator('#document-list button').first()).toContainText('Marketing');
     await expect(page.locator('#save-status')).toHaveText('All changes saved');
     await page.reload();
     await expect(page.locator('#compile-status')).toContainText('Live preview');
-    await expect(page.locator('#document-list button').first()).toContainText('Marketing.html');
+    await expect(page.locator('#document-list button').first()).toContainText('Marketing');
     await page.locator('[data-action="library"]').click();
     await page.locator('#library-folders button').filter({ hasText: 'Landing pages' }).click();
     await expect(page.locator('#library-results li')).toHaveCount(1);
@@ -78,7 +78,7 @@ for (const mobile of [false, true]) {
     await page.locator('#name-input').fill('New landing');
     await page.locator('#name-form button[type="submit"]').click();
     await expect(library).not.toBeVisible();
-    await expect(page.locator('#document-name')).toHaveText('New landing.html');
+    await expect(page.locator('#document-name')).toHaveText('New landing');
     await page.locator('[data-action="library"]').click();
     await page.locator('#library-folders button').filter({ hasText: 'Landing pages' }).click();
     await expect(page.locator('#library-results li')).toHaveCount(2);
@@ -98,7 +98,7 @@ test('library remains usable when the search CDN fails', async ({ page }) => {
   await page.locator('#library-search').fill('marketing');
   await expect(page.locator('#library-results li')).toHaveCount(1);
   await page.locator('.library-document-open').click();
-  await expect(page.locator('#document-name')).toHaveText('Marketing.html');
+  await expect(page.locator('#document-name')).toHaveText('Marketing');
 });
 
 test('imported folder IDs cannot collide with built-in library filters', async ({ page }) => {
@@ -108,10 +108,10 @@ test('imported folder IDs cannot collide with built-in library filters', async (
   await expect(page.locator('#library-rename-folder')).toBeHidden();
   await page.locator('#library-folders button').filter({ hasText: 'Pages' }).click();
   await expect(page.locator('#library-results li')).toHaveCount(1);
-  await expect(page.locator('#library-results')).toContainText('Marketing.html');
+  await expect(page.locator('#library-results')).toContainText('Marketing');
   await page.locator('#library-folders button').filter({ hasText: 'Components' }).click();
   await expect(page.locator('#library-results li')).toHaveCount(1);
-  await expect(page.locator('#library-results')).toContainText('Document 1.html');
+  await expect(page.locator('#library-results')).toContainText('Document 1');
   await page.locator('#library-folders button').filter({ hasText: 'Unfiled' }).click();
   await expect(page.locator('#library-results li')).toHaveCount(7);
   await expect(page.locator('#library-rename-folder')).toBeHidden();
@@ -121,17 +121,17 @@ test('library renames and deletes documents while keeping a valid active documen
   await page.goto('./');
   await expect(page.locator('#compile-status')).toContainText('Live preview');
   await page.locator('[data-action="library"]').click();
-  await page.getByRole('button', { name: 'Rename Welcome.html', exact: true }).click();
-  await page.locator('#name-input').fill('Home');
+  await page.getByRole('button', { name: 'Rename Welcome', exact: true }).click();
+  await page.getByLabel('Document name', { exact: true }).fill('Home.HTM');
   await page.locator('#name-form button[type="submit"]').click();
-  await expect(page.locator('#document-name')).toHaveText('Home.html');
+  await expect(page.locator('#document-name')).toHaveText('Home');
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Delete Home.html', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete Home', exact: true }).click();
   await expect(page.locator('#library-results li')).toHaveCount(1);
-  await expect(page.locator('#document-name')).toHaveText('Untitled.html');
+  await expect(page.locator('#document-name')).toHaveText('Untitled');
   await page.locator('#library-dialog [data-close]').click();
   await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.reload();
   await expect(page.locator('#compile-status')).toContainText('Live preview');
-  await expect(page.locator('#document-name')).toHaveText('Untitled.html');
+  await expect(page.locator('#document-name')).toHaveText('Untitled');
 });

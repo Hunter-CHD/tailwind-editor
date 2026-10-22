@@ -59,7 +59,7 @@ test('document palettes copy the selected editor theme and can import a new them
     mimeType: 'text/html',
     buffer: Buffer.from('<main><p class="bg-background text-text">Imported colors</p></main>'),
   });
-  await expect(page.locator('#document-name')).toHaveText('Imported.html');
+  await expect(page.locator('#document-name')).toHaveText('Imported');
   await gear.click();
   expect(JSON.parse(await palette.inputValue())).toEqual(custom);
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
@@ -86,7 +86,7 @@ test('document palettes copy the selected editor theme and can import a new them
   await gear.click();
   expect(JSON.parse(await palette.inputValue())).toEqual(paper);
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.locator('#document-list button').filter({ hasText: 'Midnight.html' }).click();
+  await page.locator('#document-list').getByRole('button', { name: '◇ Midnight', exact: true }).click();
   await gear.click();
   expect(JSON.parse(await palette.inputValue())).toEqual(midnight);
 });
