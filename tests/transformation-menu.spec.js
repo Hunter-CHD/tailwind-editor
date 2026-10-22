@@ -19,6 +19,35 @@ async function openMenu(page) {
   await page.getByRole('button', { name: 'Transformations', exact: true }).click();
 }
 
+test('new transformation code and command prefix save while the field is still focused', async ({ page }) => {
+  await openMenu(page);
+  await page.getByRole('button', { name: '+ Add transformation' }).click();
+  const name = page.getByRole('textbox', { name: 'Transformation name', exact: true });
+  await name.fill('Never lose this transform');
+  await page.getByRole('combobox', { name: 'Transformation input' }).selectOption('comment');
+  const command = page.getByRole('textbox', { name: 'Command prefix', exact: true });
+  await command.fill('saved-command');
+  await expect(command).toBeFocused();
+  await expect(page.locator('#save-status')).toHaveText('All changes saved');
+  const readSaved = () => page.evaluate(async () => {
+    const { loadWorkspace } = await import('./app/Models/Workspace.js');
+    return (await loadWorkspace()).workspace.transformations.find(item => item.name === 'Never lose this transform');
+  });
+  expect(await readSaved()).toMatchObject({ command: 'saved-command' });
+  const code = page.getByRole('textbox', { name: 'Transformation code', exact: true });
+  await code.fill('// Saved without blurring the code editor');
+  await expect(code).toBeFocused();
+  await expect(page.locator('#save-status')).toHaveText('All changes saved');
+  expect(await readSaved()).toMatchObject({ code: '// Saved without blurring the code editor' });
+  await page.reload();
+  await expect(page.locator('#compile-status')).toContainText('Live preview');
+  await page.getByRole('button', { name: 'Transformations', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Transformations by stage' }).getByRole('button', { name: /^Preview \+ export/ }).click();
+  await page.getByRole('navigation', { name: 'Transformations by stage' }).getByRole('button', { name: /Never lose this transform/ }).click();
+  await expect(code).toHaveValue('// Saved without blurring the code editor');
+  await expect(command).toHaveValue('saved-command');
+});
+
 test('grouped navigator edits one transform and preserves stage ordering, selection, and saved changes', async ({ page }) => {
   await openMenu(page);
   const nav = page.getByRole('navigation', { name: 'Transformations by stage' });

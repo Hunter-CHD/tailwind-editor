@@ -168,12 +168,19 @@ test('documents are HTML Files with linked metadata and only changed records are
     return { unchanged, source, metadata, settings, rename: window.storageWrites.splice(0) };
   });
   expect(writes.unchanged).toEqual([]);
-  expect(writes.source).toEqual([{ store: 'documentFiles', id: workspace.documents[0].id }]);
-  expect(writes.metadata).toEqual([{ store: 'documentMetadata', id: workspace.documents[0].id }]);
+  expect(writes.source).toEqual([
+    { store: 'documentFiles', id: workspace.documents[0].id },
+    { store: 'workspaces', id: 'workspace' },
+  ]);
+  expect(writes.metadata).toEqual([
+    { store: 'documentMetadata', id: workspace.documents[0].id },
+    { store: 'workspaces', id: 'workspace' },
+  ]);
   expect(writes.settings).toEqual([{ store: 'workspaces', id: 'workspace' }]);
   expect(writes.rename).toEqual([
     { store: 'documentFiles', id: workspace.documents[0].id },
     { store: 'documentMetadata', id: workspace.documents[0].id },
+    { store: 'workspaces', id: 'workspace' },
   ]);
   await page.reload();
   const loaded = await page.evaluate(
@@ -427,7 +434,10 @@ test('transformation edits, order, and deletion persist as separate IndexedDB re
     return { unchanged, edit, reorder: window.storageWrites.splice(0) };
   });
   expect(writes.unchanged).toEqual([]);
-  expect(writes.edit).toEqual([{ store: 'transformations', id: 'first' }]);
+  expect(writes.edit).toEqual([
+    { store: 'transformations', id: 'first' },
+    { store: 'workspaces', id: 'workspace' },
+  ]);
   expect(writes.reorder).toEqual([{ store: 'workspaces', id: 'workspace' }]);
   await page.reload();
   const loaded = await page.evaluate(async () => {
@@ -443,6 +453,50 @@ test('transformation edits, order, and deletion persist as separate IndexedDB re
   records = await storedRecords(page);
   expect(records.transformations).toEqual([initial[1]]);
   expect(records.workspace.transformationIds).toEqual(['second']);
+});
+
+test('a stale tab cannot delete or overwrite transformations saved by another tab', async ({ page, context }) => {
+  await page.evaluate(async () => {
+    const { loadWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace = (await loadWorkspace()).workspace;
+  });
+  const other = await context.newPage();
+  await other.goto('./preview.html');
+  await other.evaluate(async () => {
+    const { loadWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace = (await loadWorkspace()).workspace;
+  });
+  await page.evaluate(async () => {
+    const { saveWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace.transformations.push({
+      id: 'keep-me', name: 'Keep me', code: '// Important code',
+      kind: 'dom', target: 'export', enabled: false, mode: 'auto',
+    });
+    await saveWorkspace(window.tabWorkspace);
+  });
+  const failure = await other.evaluate(async () => {
+    const { saveWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace.documents[0].content = '<p>Edited in the stale tab</p>';
+    try { await saveWorkspace(window.tabWorkspace); return null; }
+    catch (error) { return error.message; }
+  });
+  expect(failure).toContain('another tab');
+  const records = await storedRecords(page);
+  expect(records.workspace.transformationIds).toEqual(['keep-me']);
+  expect(records.transformations[0]).toMatchObject({ id: 'keep-me', code: '// Important code' });
+  expect(records.files[0].content).not.toContain('Edited in the stale tab');
+  // A conflict must remain a conflict on retry, until the latest state is loaded.
+  expect(await other.evaluate(async () => {
+    const { loadWorkspace, saveWorkspace } = await import('./app/Models/Workspace.js');
+    try { await saveWorkspace(window.tabWorkspace); return false; }
+    catch {
+      const { workspace } = await loadWorkspace();
+      workspace.transformations[0].name = 'Reviewed latest';
+      await saveWorkspace(workspace);
+      return true;
+    }
+  })).toBe(true);
+  expect((await storedRecords(page)).transformations[0].name).toBe('Reviewed latest');
 });
 
 test('schema 2 inline transformations migrate atomically and retain IDs and enabled state', async ({

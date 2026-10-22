@@ -183,6 +183,13 @@ export function bindTransformations({ workspace, save, refresh, run, notify, dow
         const field = input.dataset.field;
         if (field === 'enabled') input.checked = item.enabled;
         else input.value = item[field] ?? '';
+        if (field === 'code' || field === 'command') {
+          input.addEventListener('input', () => {
+            item[field] = input.value;
+            // Track typing for autosave; preview execution still waits for change/blur.
+            save();
+          });
+        }
         input.addEventListener(field === 'name' ? 'input' : 'change', () => {
           const previousTarget = item.target;
           item[field] = field === 'enabled' ? input.checked : input.value;
