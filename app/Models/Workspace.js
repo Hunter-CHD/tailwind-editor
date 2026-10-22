@@ -154,18 +154,21 @@ async function writeWorkspace(workspace) {
       return { id, name, content, hash: cached.hash };
     }),
   );
-  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize }) => ({
+  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize, folderId, lastOpenedAt }) => ({
     id,
     name,
     colors,
     safelist,
     preflight,
     tailwindBaseSize: validateTailwindBaseSize(tailwindBaseSize),
+    folderId: folderId ?? null,
+    lastOpenedAt: lastOpenedAt ?? 0,
   }));
   const workspaceMetadata = {
     version: workspace.version,
     documentIds: workspace.documents.map((item) => item.id),
     activeId: workspace.activeId,
+    folders: workspace.folders || [],
     settings: workspace.settings,
     transformationIds: transformations.map((item) => item.id),
   };
@@ -301,6 +304,13 @@ export function validateWorkspace(value) {
   settings.wordWrap = settings.wordWrap !== false;
   settings.sidebarCollapsed = settings.sidebarCollapsed === true;
   const theme = themes[settings.theme] || settings.customTheme;
+  const folders = value.folders ?? [];
+  if (!Array.isArray(folders) || folders.some((folder) =>
+    !folder || typeof folder.id !== 'string' || !folder.id ||
+    typeof folder.name !== 'string' || !folder.name.trim()) ||
+    new Set(folders.map((folder) => folder.id)).size !== folders.length)
+    throw new Error('Folders need unique IDs and nonempty names.');
+  const folderIds = new Set(folders.map((folder) => folder.id));
   const documents = value.documents.map((item) => {
     if (typeof item.content !== 'string' || typeof item.name !== 'string')
       throw new Error('Invalid document in backup.');
@@ -311,6 +321,9 @@ export function validateWorkspace(value) {
     document.safelist = typeof item.safelist === 'string' ? item.safelist : '';
     document.preflight = item.preflight !== false;
     document.tailwindBaseSize = validateTailwindBaseSize(item.tailwindBaseSize);
+    document.folderId = folderIds.has(item.folderId) ? item.folderId : null;
+    document.lastOpenedAt = Number.isFinite(item.lastOpenedAt) && item.lastOpenedAt >= 0
+      ? item.lastOpenedAt : 0;
     if (item.colors) document.colors = validateColors(item.colors);
     return document;
   });
@@ -319,6 +332,7 @@ export function validateWorkspace(value) {
   return {
     version: 1,
     documents,
+    folders: folders.map(({ id, name }) => ({ id, name: name.trim() })),
     settings,
     activeId: documents.some((item) => item.id === value.activeId)
       ? value.activeId

@@ -5,6 +5,33 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./preview.html');
 });
 
+test('folders and recent history survive storage and backups with legacy defaults', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace } = await import('./config/editor.js');
+    const { saveWorkspace, loadWorkspace, validateWorkspace } = await import('./app/Models/Workspace.js');
+    const workspace = newWorkspace();
+    workspace.folders = [{ id: 'pages', name: 'Pages' }];
+    workspace.documents[0].folderId = 'pages';
+    workspace.documents[0].lastOpenedAt = 12345;
+    await saveWorkspace(workspace);
+    const { workspace: loaded } = await loadWorkspace();
+    const restored = validateWorkspace(JSON.parse(JSON.stringify(loaded)));
+    delete workspace.folders;
+    delete workspace.documents[0].lastOpenedAt;
+    const legacy = validateWorkspace(workspace);
+    let invalidFoldersRejected = false;
+    try { validateWorkspace({ ...workspace, folders: [{ id: 'bad', name: '' }] }); }
+    catch { invalidFoldersRejected = true; }
+    return { loaded, restored, legacy, invalidFoldersRejected };
+  });
+  expect(result.loaded.folders).toEqual([{ id: 'pages', name: 'Pages' }]);
+  expect(result.loaded.documents[0]).toMatchObject({ folderId: 'pages', lastOpenedAt: 12345 });
+  expect(result.restored).toEqual(result.loaded);
+  expect(result.legacy.folders).toEqual([]);
+  expect(result.legacy.documents[0]).toMatchObject({ folderId: null, lastOpenedAt: 0 });
+  expect(result.invalidFoldersRejected).toBe(true);
+});
+
 test('Tailwind base size survives storage and backups with legacy defaults and validation', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const { newWorkspace, newDocument } = await import('./config/editor.js');
@@ -145,6 +172,8 @@ test('documents are HTML Files with linked metadata and only changed records are
       safelist: document.safelist,
       preflight: document.preflight,
       tailwindBaseSize: document.tailwindBaseSize,
+      folderId: document.folderId,
+      lastOpenedAt: document.lastOpenedAt,
     });
   }
   await instrumentWrites(page);

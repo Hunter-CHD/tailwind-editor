@@ -75,6 +75,8 @@ export function newDocument(name = 'Untitled.html', content = '', theme = themes
     safelist: '',
     preflight: true,
     tailwindBaseSize: null,
+    folderId: null,
+    lastOpenedAt: 0,
   };
 }
 
@@ -83,6 +85,7 @@ export function newWorkspace() {
   return {
     version: 1,
     documents: [document],
+    folders: [],
     activeId: document.id,
     transformations: [],
     settings: {
