@@ -618,7 +618,7 @@ export async function start() {
       $('#palette-json').value = JSON.stringify(themeColors(getTheme()), null, 2);
     },
     transformations: () => {
-      transformations.render();
+      transformations.render({ resetGroups: true });
       $('#transform-dialog').showModal();
     },
     export: prepareExport,

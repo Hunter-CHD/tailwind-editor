@@ -115,7 +115,7 @@ Use these as `bg-background`, `bg-surface`, `text-text`, `hover:bg-accent/80`, a
 
 ## Transformations
 
-Each transformation has a name, input type, stage, enabled flag, and automatic/manual trigger. Reorder within the list using the arrow buttons. Stages always run editor → preview → export; order within each stage follows the list.
+Each transformation has a name, input type, stage, enabled flag, and automatic/manual trigger. The navigator groups transformations by stage and lets you enable them without opening their code. Click a stage heading to expand or collapse it. Each time the menu opens, Editor starts expanded and Preview + export and Export only start collapsed. Adding or importing a transformation, or changing its stage, expands its destination group. Select a transformation to edit its settings and code; the menu remembers your selection when you reopen it during the same session. On narrow screens, use **All transformations** to return to the navigator. The arrow buttons reorder the selected transformation within its stage. Stages always run editor → preview → export; order within each stage follows the navigator.
 
 | Stage            | When it runs                                                                   | What it changes      |
 | ---------------- | ------------------------------------------------------------------------------ | -------------------- |

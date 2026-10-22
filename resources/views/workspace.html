@@ -404,24 +404,26 @@
   </form>
 </dialog>
 
-<dialog id="transform-dialog" class="wide-dialog">
+<dialog id="transform-dialog" class="wide-dialog" aria-labelledby="transform-title">
   <div class="dialog-heading">
     <div>
-      <h2>Transformations</h2>
+      <h2 id="transform-title">Transformations</h2>
       <p>Edit a shared <code>document</code>, or use <code>code</code> for string operations.</p>
     </div>
     <button data-close class="icon-button" aria-label="Close">×</button>
   </div>
-  <p class="subtle">
-    DOM transforms share one parsed document per pipeline. Stages run in order: editor, preview,
-    then export only. Export-only transforms never change your source or live preview. Only run code
-    you trust; workers have a three-second execution limit.
-  </p>
   <div class="button-row">
     <button data-action="add-transform">+ Add transformation</button
     ><button data-action="import-transforms">Import</button
     ><button data-action="export-transforms">Export</button>
   </div>
-  <div id="transformation-list" class="transformation-list"></div>
+  <div class="transform-workspace">
+    <nav id="transformation-list" class="transformation-list" aria-label="Transformations by stage"></nav>
+    <div class="transform-detail">
+      <button id="transform-back" type="button">← All transformations</button>
+      <div id="transformation-editor" aria-label="Selected transformation"></div>
+    </div>
+  </div>
+  <p class="subtle transform-guidance">Stages run Editor → Preview + export → Export only; reorder within each stage. Only run code you trust. Execution is limited to three seconds.</p>
   <p id="transform-log" class="subtle" role="status"></p>
 </dialog>
