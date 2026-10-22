@@ -11,8 +11,11 @@
 </header>
 <main class="app-layout">
   <aside id="documents-sidebar" class="sidebar" aria-label="Documents">
+    <button data-action="library" class="library-toggle" aria-haspopup="dialog" aria-controls="library-dialog">
+      <span>All documents</span><span id="library-count" class="count">0</span>
+    </button>
     <div class="sidebar-heading">
-      <h1>Documents</h1>
+      <h1>Recent</h1>
       <button data-action="new" class="icon-button" aria-label="New document">+</button>
     </div>
     <div id="document-list" class="document-list"></div>
@@ -164,12 +167,39 @@
       <h2 id="name-title">Rename document</h2>
       <button type="button" data-close class="icon-button" aria-label="Close">×</button>
     </div>
-    <label>File name<input id="name-input" required maxlength="100" autocomplete="off" /></label>
+    <label><span id="name-label">File name</span><input id="name-input" required maxlength="100" autocomplete="off" /></label>
     <div class="dialog-footer">
       <button type="button" data-close>Cancel</button
       ><button class="primary" type="submit">Save</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="library-dialog" aria-labelledby="library-title">
+  <div class="dialog-heading">
+    <div><h2 id="library-title">Document library</h2><p>Find your next document or organize your collection.</p></div>
+    <button data-close class="icon-button" aria-label="Close">×</button>
+  </div>
+  <div class="library-toolbar">
+    <label class="library-search-label">Search documents<input id="library-search" type="search" placeholder="Search document or folder names…" autocomplete="off" /></label>
+    <label>Sort by<select id="library-sort"><option value="recent">Recently opened</option><option value="name">Name</option></select></label>
+    <button id="library-new-document" class="primary">New document</button>
+  </div>
+  <p id="library-search-note" class="library-search-note" role="status"></p>
+  <div class="library-layout">
+    <nav class="library-navigation" aria-label="Document folders">
+      <div id="library-folders"></div>
+      <button id="library-new-folder">+ New folder</button>
+    </nav>
+    <section class="library-content" aria-labelledby="library-folder-title">
+      <div class="library-section-heading">
+        <div><h3 id="library-folder-title">All documents</h3><span id="library-status" role="status"></span></div>
+        <div class="library-folder-actions"><button id="library-rename-folder" hidden>Rename folder</button><button id="library-delete-folder" hidden>Delete folder</button></div>
+      </div>
+      <ul id="library-results" aria-label="Saved documents"></ul>
+      <p id="library-empty" class="library-empty" hidden></p>
+    </section>
+  </div>
 </dialog>
 
 <dialog id="theme-dialog">

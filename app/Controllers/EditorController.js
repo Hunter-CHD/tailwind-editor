@@ -12,6 +12,7 @@ import { runTransformations } from '../Services/Transformations.js';
 import { inspectHtml, affectsEditingRegion } from '../Services/Html.js';
 import { bindThemeColorPicker } from '../Services/ThemeColorPicker.js';
 import { bindTransformations } from './TransformationController.js';
+import { bindDocumentLibrary, recentDocuments } from './DocumentLibraryController.js';
 
 const $ = (selector) => document.querySelector(selector);
 const size = (text) => `${(new Blob([text]).size / 1024).toFixed(1)} KB`;
@@ -34,6 +35,7 @@ export async function start() {
   let exportResult;
   let exportName;
   let nameAction;
+  let nameExtension = true;
   let fileHandler;
   let previewWindow;
   let previewReady = false;
@@ -353,7 +355,7 @@ export async function start() {
 
   function renderDocuments() {
     $('#document-list').replaceChildren();
-    workspace.documents.forEach((item) => {
+    recentDocuments(workspace).slice(0, 6).forEach((item) => {
       const button = document.createElement('button');
       button.className = 'document-item';
       button.setAttribute('aria-current', String(item.id === workspace.activeId));
@@ -368,12 +370,14 @@ export async function start() {
       $('#document-list').append(button);
     });
     $('#document-name').textContent = activeDocument().name;
+    $('#library-count').textContent = workspace.documents.length;
     updatePopout();
   }
 
   function openDocument(id) {
     clearRenderError();
     workspace.activeId = id;
+    activeDocument().lastOpenedAt = Date.now();
     pendingEditorTransforms = false;
     editingBoundary = false;
     pendingRenderError = false;
@@ -383,8 +387,10 @@ export async function start() {
     refresh();
   }
 
-  function askName(title, initial, action) {
+  function askName(title, initial, action, { extension = true } = {}) {
     nameAction = action;
+    nameExtension = extension;
+    $('#name-label').textContent = extension ? 'File name' : 'Folder name';
     $('#name-title').textContent = title;
     $('#name-input').value = initial;
     $('#name-dialog').showModal();
@@ -546,8 +552,20 @@ export async function start() {
     },
   });
 
+  function createDocument(name, folderId = null) {
+    const document = newDocument(name, '', getTheme());
+    document.folderId = folderId;
+    workspace.documents.push(document);
+    openDocument(document.id);
+  }
+
+  const library = bindDocumentLibrary({
+    workspace, save, openDocument, renderDocuments, askName, createDocument,
+  });
+
   const actions = {
     ...transformations.actions,
+    library: () => library.show(),
     'toggle-documents': () => {
       workspace.settings.sidebarCollapsed = !workspace.settings.sidebarCollapsed;
       applySidebarState();
@@ -555,9 +573,7 @@ export async function start() {
     },
     new: () =>
       askName('New document', 'Untitled.html', (name) => {
-        const document = newDocument(name, '', getTheme());
-        workspace.documents.push(document);
-        openDocument(document.id);
+        createDocument(name);
       }),
     rename: () =>
       askName('Rename document', activeDocument().name, (name) => {
@@ -687,7 +703,7 @@ export async function start() {
       $('#name-input').focus();
       return;
     }
-    nameAction(/\.html?$/i.test(name) ? name : `${name}.html`);
+    nameAction(!nameExtension || /\.html?$/i.test(name) ? name : `${name}.html`);
     $('#name-dialog').close();
   });
   $('#custom-theme-form').addEventListener('submit', (event) => {
