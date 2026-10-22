@@ -166,7 +166,13 @@ for (const mode of ['auto', 'manual']) {
     await page.waitForFunction(() =>
       window.monaco.editor.getModels()[0].getValue().includes('After'),
     );
-    await expect(page.locator('#compile-status')).toContainText('Live preview');
+    // Manual runs report completion after rendering; automatic runs keep the preview status.
+    await expect(page.locator('#compile-status')).toContainText(
+      mode === 'manual' ? 'Ran Preserve editing position.' : 'Live preview',
+    );
+    await expect(page.frameLocator('#preview').locator('p').first()).toHaveText(
+      `After 0 ${'x'.repeat(200)}`,
+    );
     const after = await page.evaluate(() => {
       const editor = window.monaco.editor.getEditors()[0];
       return {
