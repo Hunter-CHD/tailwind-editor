@@ -5,6 +5,27 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./preview.html');
 });
 
+test('pins survive storage and backups, default for legacy data, and discard missing or duplicate IDs', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace, newDocument } = await import('./config/editor.js');
+    const { validateWorkspace, saveWorkspace, loadWorkspace } = await import('./app/Models/Workspace.js');
+    const workspace = newWorkspace();
+    workspace.documents.push(newDocument('Pinned'));
+    workspace.pinnedDocumentIds = [workspace.documents[1].id, workspace.documents[0].id];
+    await saveWorkspace(workspace);
+    const { workspace: loaded } = await loadWorkspace();
+    const backup = validateWorkspace(JSON.parse(JSON.stringify(loaded)));
+    const cleaned = validateWorkspace({ ...workspace, pinnedDocumentIds: ['missing', workspace.activeId, workspace.activeId] });
+    delete workspace.pinnedDocumentIds;
+    const legacy = validateWorkspace(workspace);
+    return { loaded, backup, cleaned: cleaned.pinnedDocumentIds, legacy: legacy.pinnedDocumentIds };
+  });
+  expect(result.loaded.pinnedDocumentIds).toEqual(result.loaded.documents.map((item) => item.id).reverse());
+  expect(result.backup).toEqual(result.loaded);
+  expect(result.cleaned).toEqual([result.loaded.activeId]);
+  expect(result.legacy).toEqual([]);
+});
+
 test('legacy document names become extensionless while stored HTML Files keep their extension', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const { newWorkspace, newDocument } = await import('./config/editor.js');
