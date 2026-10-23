@@ -115,7 +115,7 @@ Use these as `bg-background`, `bg-surface`, `text-text`, `hover:bg-accent/80`, a
 
 ## Transformations
 
-Each transformation has a name, input type, stage, enabled flag, and automatic/manual trigger. Reorder within the list using the arrow buttons. Stages always run editor → preview → export; order within each stage follows the list.
+Each transformation has a name, input type, stage, enabled flag, and automatic/manual trigger. The navigator groups transformations by stage and lets you enable them without opening their code. Click a stage heading to expand or collapse it. Each time the menu opens, Editor starts expanded and Preview + export and Export only start collapsed. Adding or importing a transformation, or changing its stage, expands its destination group. Select a transformation to edit its settings and code; the menu remembers your selection when you reopen it during the same session. On narrow screens, use **All transformations** to return to the navigator. The arrow buttons reorder the selected transformation within its stage. Stages always run editor → preview → export; order within each stage follows the navigator.
 
 | Stage            | When it runs                                                                   | What it changes      |
 | ---------------- | ------------------------------------------------------------------------------ | -------------------- |
@@ -147,10 +147,10 @@ Consecutive DOM transforms receive the **same document object**. The pipeline pa
 
 ### Comment commands
 
-Select **Comment command** and set **Command prefix** to a name such as `accumulate`. Names are case-sensitive and use letters, digits, underscores, and hyphens, starting with a letter or underscore. Invoke it with an HTML comment:
+Select **Comment command** and set **Command prefix** to a name such as `command`. Names are case-sensitive and use letters, digits, underscores, and hyphens, starting with a letter or underscore. Invoke it with an HTML comment:
 
 ```html
-<!-- accumulate: h2; -->
+<!-- command: [args]; -->
 ```
 
 The handler receives `args` (the text between `:` and the first `;`, trimmed at the edges) and `elements` (an array of all following direct sibling elements through the end of the comment's parent). Descendants stay inside those elements. It also receives `nodes` (the same range including text and comments), `comment`, `document`, and `context`. These arrays are snapshots, so moving nodes does not skip later siblings. Edit the DOM directly and do not return a value.
@@ -199,9 +199,9 @@ The `tailwind-editor` IndexedDB database uses schema version 3 with four object 
 | `documentFiles`    | Document ID       | An HTML `File` and a content hash used to detect changes                         |
 | `documentMetadata` | Same document ID  | Name, colors, Preflight, and additional classes                                  |
 | `transformations`  | Transformation ID | Name, code, input type, stage, trigger, and enabled state                        |
-| `workspaces`       | `workspace`       | Ordered document and transformation IDs, active document ID, and editor settings |
+| `workspaces`       | `workspace`       | Ordered document and transformation IDs, active document ID, settings, and save revision |
 
-Each document's file and metadata are linked by ID. Editing HTML writes only that document's file; changing its settings writes only its metadata. Renaming updates the file's name and metadata together. Deleted documents have both records removed. Each transformation has its own ID-keyed record; editing its code or options updates only that record, while reordering changes the ordered IDs in workspace metadata. Removing a transformation deletes its record. Short debounced saves are serialized, update only changed records, and commit across all four stores in one transaction. The app acknowledges a save only after the transaction succeeds and reports errors if storage is unavailable or full. Files remain in browser storage; they are not files on your computer's filesystem.
+Each document's file and metadata are linked by ID. Editing HTML updates that document's file; changing its settings updates its metadata. Renaming updates the file's name and metadata together. Deleted documents have both records removed. Each transformation has its own ID-keyed record; editing its code or options updates that record, while reordering changes the ordered IDs in workspace metadata. Removing a transformation deletes its record. Transformation code and command prefixes save as you type, without requiring blur; preview execution still waits for a change/blur boundary. Short debounced saves are serialized and commit across all four stores in one transaction. Each changed save also updates a revision in workspace metadata. A stale tab cannot overwrite a newer save from another tab: the entire transaction aborts and the app asks you to back up that tab's changes and reload. Unchanged saves write nothing. The app acknowledges a save only after the transaction succeeds and reports errors if storage is unavailable or full. Files remain in browser storage; they are not files on your computer's filesystem.
 
 Existing single-record IndexedDB workspaces and schema 2 workspaces with inline transformations migrate automatically, preserving IDs, order, settings, and enabled transformations. The old workspace record is replaced only when all new records commit successfully. **Settings → Download backup** still produces a portable JSON workspace, and existing JSON backups remain compatible. Browser storage can be cleared or evicted; it is not a substitute for a backup.
 

@@ -5,6 +5,56 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./preview.html');
 });
 
+test('legacy document names become extensionless while stored HTML Files keep their extension', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace, newDocument } = await import('./config/editor.js');
+    const { validateWorkspace, saveWorkspace, loadWorkspace } = await import('./app/Models/Workspace.js');
+    const workspace = newWorkspace();
+    workspace.documents[0].name = 'Existing.HTML';
+    workspace.documents.push({ ...newDocument(), name: 'Imported.htm', content: '<p>Keep me</p>' });
+    workspace.folders = [{ id: 'folder', name: 'Folder.html' }];
+    workspace.documents[1].folderId = 'folder';
+    const backup = validateWorkspace(JSON.parse(JSON.stringify(workspace)));
+    await saveWorkspace(workspace);
+    const { workspace: loaded } = await loadWorkspace();
+    await saveWorkspace(loaded);
+    return { backup, loaded, defaultName: newDocument().name };
+  });
+  expect(result.defaultName).toBe('Untitled');
+  expect(result.loaded.documents.map(({ name }) => name)).toEqual(['Existing', 'Imported']);
+  expect(result.loaded.documents[1]).toMatchObject({ content: '<p>Keep me</p>', folderId: 'folder' });
+  expect(result.loaded.folders[0].name).toBe('Folder.html');
+  expect(result.backup).toEqual(result.loaded);
+  expect((await storedRecords(page)).files.map(({ name }) => name).sort()).toEqual(['Existing.html', 'Imported.html']);
+});
+
+test('folders and recent history survive storage and backups with legacy defaults', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace } = await import('./config/editor.js');
+    const { saveWorkspace, loadWorkspace, validateWorkspace } = await import('./app/Models/Workspace.js');
+    const workspace = newWorkspace();
+    workspace.folders = [{ id: 'pages', name: 'Pages' }];
+    workspace.documents[0].folderId = 'pages';
+    workspace.documents[0].lastOpenedAt = 12345;
+    await saveWorkspace(workspace);
+    const { workspace: loaded } = await loadWorkspace();
+    const restored = validateWorkspace(JSON.parse(JSON.stringify(loaded)));
+    delete workspace.folders;
+    delete workspace.documents[0].lastOpenedAt;
+    const legacy = validateWorkspace(workspace);
+    let invalidFoldersRejected = false;
+    try { validateWorkspace({ ...workspace, folders: [{ id: 'bad', name: '' }] }); }
+    catch { invalidFoldersRejected = true; }
+    return { loaded, restored, legacy, invalidFoldersRejected };
+  });
+  expect(result.loaded.folders).toEqual([{ id: 'pages', name: 'Pages' }]);
+  expect(result.loaded.documents[0]).toMatchObject({ folderId: 'pages', lastOpenedAt: 12345 });
+  expect(result.restored).toEqual(result.loaded);
+  expect(result.legacy.folders).toEqual([]);
+  expect(result.legacy.documents[0]).toMatchObject({ folderId: null, lastOpenedAt: 0 });
+  expect(result.invalidFoldersRejected).toBe(true);
+});
+
 test('Tailwind base size survives storage and backups with legacy defaults and validation', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const { newWorkspace, newDocument } = await import('./config/editor.js');
@@ -134,7 +184,7 @@ test('documents are HTML Files with linked metadata and only changed records are
     expect(records.files.find((item) => item.id === document.id)).toEqual({
       id: document.id,
       isFile: true,
-      name: document.name,
+      name: `${document.name}.html`,
       type: 'text/html;charset=utf-8',
       content: document.content,
     });
@@ -145,6 +195,8 @@ test('documents are HTML Files with linked metadata and only changed records are
       safelist: document.safelist,
       preflight: document.preflight,
       tailwindBaseSize: document.tailwindBaseSize,
+      folderId: document.folderId,
+      lastOpenedAt: document.lastOpenedAt,
     });
   }
   await instrumentWrites(page);
@@ -163,24 +215,31 @@ test('documents are HTML Files with linked metadata and only changed records are
     workspace.settings.fontSize = 18;
     await saveWorkspace(workspace);
     const settings = window.storageWrites.splice(0);
-    workspace.documents[0].name = 'Renamed.html';
+    workspace.documents[0].name = 'Renamed';
     await saveWorkspace(workspace);
     return { unchanged, source, metadata, settings, rename: window.storageWrites.splice(0) };
   });
   expect(writes.unchanged).toEqual([]);
-  expect(writes.source).toEqual([{ store: 'documentFiles', id: workspace.documents[0].id }]);
-  expect(writes.metadata).toEqual([{ store: 'documentMetadata', id: workspace.documents[0].id }]);
+  expect(writes.source).toEqual([
+    { store: 'documentFiles', id: workspace.documents[0].id },
+    { store: 'workspaces', id: 'workspace' },
+  ]);
+  expect(writes.metadata).toEqual([
+    { store: 'documentMetadata', id: workspace.documents[0].id },
+    { store: 'workspaces', id: 'workspace' },
+  ]);
   expect(writes.settings).toEqual([{ store: 'workspaces', id: 'workspace' }]);
   expect(writes.rename).toEqual([
     { store: 'documentFiles', id: workspace.documents[0].id },
     { store: 'documentMetadata', id: workspace.documents[0].id },
+    { store: 'workspaces', id: 'workspace' },
   ]);
   await page.reload();
   const loaded = await page.evaluate(
     async () => (await (await import('./app/Models/Workspace.js')).loadWorkspace()).workspace,
   );
   expect(loaded.documents[0]).toMatchObject({
-    name: 'Renamed.html',
+    name: 'Renamed',
     content: '<p>Edited</p>',
     preflight: false,
     safelist: 'hidden',
@@ -427,7 +486,10 @@ test('transformation edits, order, and deletion persist as separate IndexedDB re
     return { unchanged, edit, reorder: window.storageWrites.splice(0) };
   });
   expect(writes.unchanged).toEqual([]);
-  expect(writes.edit).toEqual([{ store: 'transformations', id: 'first' }]);
+  expect(writes.edit).toEqual([
+    { store: 'transformations', id: 'first' },
+    { store: 'workspaces', id: 'workspace' },
+  ]);
   expect(writes.reorder).toEqual([{ store: 'workspaces', id: 'workspace' }]);
   await page.reload();
   const loaded = await page.evaluate(async () => {
@@ -443,6 +505,50 @@ test('transformation edits, order, and deletion persist as separate IndexedDB re
   records = await storedRecords(page);
   expect(records.transformations).toEqual([initial[1]]);
   expect(records.workspace.transformationIds).toEqual(['second']);
+});
+
+test('a stale tab cannot delete or overwrite transformations saved by another tab', async ({ page, context }) => {
+  await page.evaluate(async () => {
+    const { loadWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace = (await loadWorkspace()).workspace;
+  });
+  const other = await context.newPage();
+  await other.goto('./preview.html');
+  await other.evaluate(async () => {
+    const { loadWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace = (await loadWorkspace()).workspace;
+  });
+  await page.evaluate(async () => {
+    const { saveWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace.transformations.push({
+      id: 'keep-me', name: 'Keep me', code: '// Important code',
+      kind: 'dom', target: 'export', enabled: false, mode: 'auto',
+    });
+    await saveWorkspace(window.tabWorkspace);
+  });
+  const failure = await other.evaluate(async () => {
+    const { saveWorkspace } = await import('./app/Models/Workspace.js');
+    window.tabWorkspace.documents[0].content = '<p>Edited in the stale tab</p>';
+    try { await saveWorkspace(window.tabWorkspace); return null; }
+    catch (error) { return error.message; }
+  });
+  expect(failure).toContain('another tab');
+  const records = await storedRecords(page);
+  expect(records.workspace.transformationIds).toEqual(['keep-me']);
+  expect(records.transformations[0]).toMatchObject({ id: 'keep-me', code: '// Important code' });
+  expect(records.files[0].content).not.toContain('Edited in the stale tab');
+  // A conflict must remain a conflict on retry, until the latest state is loaded.
+  expect(await other.evaluate(async () => {
+    const { loadWorkspace, saveWorkspace } = await import('./app/Models/Workspace.js');
+    try { await saveWorkspace(window.tabWorkspace); return false; }
+    catch {
+      const { workspace } = await loadWorkspace();
+      workspace.transformations[0].name = 'Reviewed latest';
+      await saveWorkspace(workspace);
+      return true;
+    }
+  })).toBe(true);
+  expect((await storedRecords(page)).transformations[0].name).toBe('Reviewed latest');
 });
 
 test('schema 2 inline transformations migrate atomically and retain IDs and enabled state', async ({

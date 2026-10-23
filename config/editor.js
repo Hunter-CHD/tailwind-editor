@@ -66,23 +66,30 @@ export const starterHtml = `<main class="min-h-screen bg-background px-6 py-16 t
   </div>
 </main>`;
 
-export function newDocument(name = 'Untitled.html', content = '', theme = themes.light) {
+export function documentName(name) {
+  return name.trim().replace(/(?:\.html?)+$/i, '').trim() || 'Untitled';
+}
+
+export function newDocument(name = 'Untitled', content = '', theme = themes.light) {
   return {
     id: crypto.randomUUID(),
-    name,
+    name: documentName(name),
     content,
     colors: themeColors(theme),
     safelist: '',
     preflight: true,
     tailwindBaseSize: null,
+    folderId: null,
+    lastOpenedAt: 0,
   };
 }
 
 export function newWorkspace() {
-  const document = newDocument('Welcome.html', starterHtml);
+  const document = newDocument('Welcome', starterHtml);
   return {
     version: 1,
     documents: [document],
+    folders: [],
     activeId: document.id,
     transformations: [],
     settings: {

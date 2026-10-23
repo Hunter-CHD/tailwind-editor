@@ -166,7 +166,13 @@ for (const mode of ['auto', 'manual']) {
     await page.waitForFunction(() =>
       window.monaco.editor.getModels()[0].getValue().includes('After'),
     );
-    await expect(page.locator('#compile-status')).toContainText('Live preview');
+    // Manual runs report completion after rendering; automatic runs keep the preview status.
+    await expect(page.locator('#compile-status')).toContainText(
+      mode === 'manual' ? 'Ran Preserve editing position.' : 'Live preview',
+    );
+    await expect(page.frameLocator('#preview').locator('p').first()).toHaveText(
+      `After 0 ${'x'.repeat(200)}`,
+    );
     const after = await page.evaluate(() => {
       const editor = window.monaco.editor.getEditors()[0];
       return {
@@ -338,10 +344,10 @@ test('popout follows edits, colors, and document switches and can be reused or r
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await setSource(page, '<h1>Second document</h1>');
   await expect(popup.frameLocator('iframe').locator('h1')).toHaveText('Second document');
-  await expect(popup).toHaveTitle('Live preview · Second.html');
-  await page.getByRole('button', { name: '◇ Welcome.html', exact: true }).click();
+  await expect(popup).toHaveTitle('Live preview · Second');
+  await page.getByRole('button', { name: '◇ Welcome', exact: true }).click();
   await expect(popup.frameLocator('iframe').locator('h1')).toHaveText('Updated live');
-  await expect(popup).toHaveTitle('Live preview · Welcome.html');
+  await expect(popup).toHaveTitle('Live preview · Welcome');
 
   await page.getByRole('button', { name: 'Focus preview ↗', exact: true }).click();
   expect(context.pages()).toHaveLength(2);
@@ -678,7 +684,7 @@ for (const shortcut of ['Control+Alt+f', 'Alt+Shift+f']) {
 test('formats HTML and manages separate documents', async ({ page }) => {
   await openEditor(page);
   await page.getByRole('button', { name: 'New document', exact: true }).click();
-  await page.locator('#name-input').fill('Second');
+  await page.getByLabel('Document name', { exact: true }).fill('Second.HTML');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await setSource(page, '<section><h1>Hello</h1><p>Second document</p></section>');
   await page.evaluate(() =>
@@ -692,9 +698,9 @@ test('formats HTML and manages separate documents', async ({ page }) => {
     lineNumber: 1,
     column: 3,
   });
-  await page.getByRole('button', { name: '◇ Welcome.html', exact: true }).click();
+  await page.getByRole('button', { name: '◇ Welcome', exact: true }).click();
   await expect(page.frameLocator('#preview').locator('h1')).toContainText('Start with an idea.');
-  await page.getByRole('button', { name: '◇ Second.html', exact: true }).click();
+  await page.getByRole('button', { name: '◇ Second', exact: true }).click();
   await expect(page.frameLocator('#preview').locator('h1')).toHaveText('Hello');
 });
 
@@ -729,7 +735,7 @@ test('Tailwind base size settings update preview and export and survive duplicat
   await gear.click();
   await expect(toggle).not.toBeChecked();
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.locator('#document-list button').filter({ hasText: 'Welcome.html' }).click();
+  await page.locator('#document-list').getByRole('button', { name: '◇ Welcome', exact: true }).click();
   await gear.click();
   await expect(toggle).toBeChecked();
   await expect(size).toHaveValue('18');
@@ -751,7 +757,7 @@ test('document settings stay with each document and separate from workspace pref
   const gear = page.getByRole('button', { name: 'Document settings', exact: true });
   const documentSettings = page.getByRole('dialog', { name: 'Document settings', exact: true });
   await gear.click();
-  await expect(documentSettings.locator('#document-settings-name')).toHaveText('Welcome.html');
+  await expect(documentSettings.locator('#document-settings-name')).toHaveText('Welcome');
   const firstColors = JSON.parse(
     await documentSettings.getByLabel('Color names and hex values').inputValue(),
   );
@@ -766,7 +772,7 @@ test('document settings stay with each document and separate from workspace pref
   await page.locator('#name-input').fill('Second');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await gear.click();
-  await expect(documentSettings.locator('#document-settings-name')).toHaveText('Second.html');
+  await expect(documentSettings.locator('#document-settings-name')).toHaveText('Second');
   await expect(
     documentSettings.getByLabel('Include Tailwind base styles (Preflight)'),
   ).toBeChecked();
@@ -781,7 +787,7 @@ test('document settings stay with each document and separate from workspace pref
     .fill(JSON.stringify(secondColors));
   await documentSettings.getByLabel('Additional classes').fill('block');
   await documentSettings.getByRole('button', { name: 'Save settings', exact: true }).click();
-  await page.locator('#document-list button').filter({ hasText: 'Welcome.html' }).click();
+  await page.locator('#document-list').getByRole('button', { name: '◇ Welcome', exact: true }).click();
   await expect(page.locator('#save-status')).toHaveText('All changes saved');
   await page.reload();
   await expect(page.locator('#compile-status')).toContainText('Live preview');
@@ -798,7 +804,7 @@ test('document settings stay with each document and separate from workspace pref
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(workspaceSettings.getByLabel('Editor font size')).toHaveValue('16');
   await workspaceSettings.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.locator('#document-list button').filter({ hasText: 'Second.html' }).click();
+  await page.locator('#document-list').getByRole('button', { name: '◇ Second', exact: true }).click();
   await gear.click();
   await expect(documentSettings.getByLabel('Additional classes')).toHaveValue('block');
   expect(

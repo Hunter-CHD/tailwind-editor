@@ -1,4 +1,4 @@
-import { newWorkspace, newDocument, themes } from '../../config/editor.js';
+import { newWorkspace, newDocument, documentName, themes } from '../../config/editor.js';
 import { validateTailwindBaseSize } from '../Services/TailwindUnits.js';
 
 const stores = ['workspaces', 'documentFiles', 'documentMetadata', 'transformations'];
@@ -6,6 +6,7 @@ const colorPattern = /^#[0-9a-f]{6}$/i;
 const contentHashes = new Map();
 let databasePromise;
 let saveChain = Promise.resolve();
+let storageRevision;
 
 function openDatabase() {
   if (!databasePromise) {
@@ -74,6 +75,7 @@ async function readRecords() {
 export async function loadWorkspace() {
   await saveChain.catch(() => {});
   const { saved, files, metadata, transformations: storedTransformations } = await readRecords();
+  storageRevision = saved?.revision || 0;
   if (saved) {
     // The previous schema kept the entire workspace in this one record.
     if (Array.isArray(saved.documents)) {
@@ -149,21 +151,24 @@ async function writeWorkspace(workspace) {
         };
         contentHashes.set(id, cached);
       }
-      return { id, name, content, hash: cached.hash };
+      return { id, name: `${documentName(name)}.html`, content, hash: cached.hash };
     }),
   );
-  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize }) => ({
+  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize, folderId, lastOpenedAt }) => ({
     id,
     name,
     colors,
     safelist,
     preflight,
     tailwindBaseSize: validateTailwindBaseSize(tailwindBaseSize),
+    folderId: folderId ?? null,
+    lastOpenedAt: lastOpenedAt ?? 0,
   }));
   const workspaceMetadata = {
     version: workspace.version,
     documentIds: workspace.documents.map((item) => item.id),
     activeId: workspace.activeId,
+    folders: workspace.folders || [],
     settings: workspace.settings,
     transformationIds: transformations.map((item) => item.id),
   };
@@ -171,6 +176,7 @@ async function writeWorkspace(workspace) {
   const transaction = database.transaction(stores, 'readwrite');
   const done = transactionDone(transaction);
   let writeError;
+  let recordsChanged = false;
   function updateStore(name, update) {
     const store = transaction.objectStore(name);
     const request = store.getAll();
@@ -187,36 +193,62 @@ async function writeWorkspace(workspace) {
     const existing = new Map(records.map((item) => [item.id, item]));
     for (const { id, name, content, hash } of files) {
       const previous = existing.get(id);
-      if (previous?.hash !== hash || previous.file?.name !== name)
+      if (previous?.hash !== hash || previous.file?.name !== name) {
+        recordsChanged = true;
         store.put({
           id,
           hash,
           file: new File([content], name, { type: 'text/html;charset=utf-8' }),
         });
+      }
     }
-    for (const { id } of records) if (!ids.has(id)) store.delete(id);
+    for (const { id } of records) if (!ids.has(id)) {
+      recordsChanged = true;
+      store.delete(id);
+    }
   });
   updateStore('documentMetadata', (store, records) => {
     const existing = new Map(records.map((item) => [item.id, item]));
     for (const details of metadata) {
-      if (JSON.stringify(existing.get(details.id)) !== JSON.stringify(details)) store.put(details);
+      if (JSON.stringify(existing.get(details.id)) !== JSON.stringify(details)) {
+        recordsChanged = true;
+        store.put(details);
+      }
     }
-    for (const { id } of records) if (!ids.has(id)) store.delete(id);
+    for (const { id } of records) if (!ids.has(id)) {
+      recordsChanged = true;
+      store.delete(id);
+    }
   });
   updateStore('transformations', (store, records) => {
     const existing = new Map(records.map((item) => [item.id, item]));
     for (const transformation of transformations) {
-      if (JSON.stringify(existing.get(transformation.id)) !== JSON.stringify(transformation))
+      if (JSON.stringify(existing.get(transformation.id)) !== JSON.stringify(transformation)) {
+        recordsChanged = true;
         store.put(transformation);
+      }
     }
-    for (const { id } of records) if (!transformationIds.has(id)) store.delete(id);
+    for (const { id } of records) if (!transformationIds.has(id)) {
+      recordsChanged = true;
+      store.delete(id);
+    }
   });
   const workspaceStore = transaction.objectStore('workspaces');
   const request = workspaceStore.get('workspace');
   request.onsuccess = () => {
     try {
-      if (JSON.stringify(request.result) !== JSON.stringify(workspaceMetadata))
+      const revision = request.result?.revision || 0;
+      // Check inside the write transaction: another tab may have saved since load.
+      // Aborting also rolls back record puts/deletes queued by updateStore above.
+      if (storageRevision !== undefined && revision !== storageRevision)
+        throw new Error(
+          'This workspace was saved in another tab. Download a backup of this tab’s changes, then reload before editing further.',
+        );
+      workspaceMetadata.revision = revision;
+      if (recordsChanged || JSON.stringify(request.result) !== JSON.stringify(workspaceMetadata)) {
+        workspaceMetadata.revision++;
         workspaceStore.put(workspaceMetadata, 'workspace');
+      }
     } catch (error) {
       writeError = error;
       transaction.abort();
@@ -225,6 +257,7 @@ async function writeWorkspace(workspace) {
   await done.catch((error) => {
     throw writeError || error;
   });
+  storageRevision = workspaceMetadata.revision;
   for (const id of contentHashes.keys()) if (!ids.has(id)) contentHashes.delete(id);
 }
 
@@ -271,6 +304,13 @@ export function validateWorkspace(value) {
   settings.wordWrap = settings.wordWrap !== false;
   settings.sidebarCollapsed = settings.sidebarCollapsed === true;
   const theme = themes[settings.theme] || settings.customTheme;
+  const folders = value.folders ?? [];
+  if (!Array.isArray(folders) || folders.some((folder) =>
+    !folder || typeof folder.id !== 'string' || !folder.id ||
+    typeof folder.name !== 'string' || !folder.name.trim()) ||
+    new Set(folders.map((folder) => folder.id)).size !== folders.length)
+    throw new Error('Folders need unique IDs and nonempty names.');
+  const folderIds = new Set(folders.map((folder) => folder.id));
   const documents = value.documents.map((item) => {
     if (typeof item.content !== 'string' || typeof item.name !== 'string')
       throw new Error('Invalid document in backup.');
@@ -281,6 +321,9 @@ export function validateWorkspace(value) {
     document.safelist = typeof item.safelist === 'string' ? item.safelist : '';
     document.preflight = item.preflight !== false;
     document.tailwindBaseSize = validateTailwindBaseSize(item.tailwindBaseSize);
+    document.folderId = folderIds.has(item.folderId) ? item.folderId : null;
+    document.lastOpenedAt = Number.isFinite(item.lastOpenedAt) && item.lastOpenedAt >= 0
+      ? item.lastOpenedAt : 0;
     if (item.colors) document.colors = validateColors(item.colors);
     return document;
   });
@@ -289,6 +332,7 @@ export function validateWorkspace(value) {
   return {
     version: 1,
     documents,
+    folders: folders.map(({ id, name }) => ({ id, name: name.trim() })),
     settings,
     activeId: documents.some((item) => item.id === value.activeId)
       ? value.activeId

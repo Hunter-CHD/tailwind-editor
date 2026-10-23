@@ -1,4 +1,4 @@
-import { newDocument, newWorkspace, themes, themeColors } from '../../config/editor.js';
+import { newDocument, newWorkspace, documentName, themes, themeColors } from '../../config/editor.js';
 import {
   loadWorkspace,
   saveWorkspace,
@@ -12,6 +12,8 @@ import { runTransformations } from '../Services/Transformations.js';
 import { inspectHtml, affectsEditingRegion } from '../Services/Html.js';
 import { bindThemeColorPicker } from '../Services/ThemeColorPicker.js';
 import { bindTransformations } from './TransformationController.js';
+import { bindDocumentLibrary, recentDocuments } from './DocumentLibraryController.js';
+import { createPreviewRenderer } from '../Services/Preview.js';
 
 const $ = (selector) => document.querySelector(selector);
 const size = (text) => `${(new Blob([text]).size / 1024).toFixed(1)} KB`;
@@ -34,15 +36,19 @@ export async function start() {
   let exportResult;
   let exportName;
   let nameAction;
+  let namingFolder = false;
   let fileHandler;
   let previewWindow;
   let previewReady = false;
+  let previewHtml = '';
+  let previewDocumentId;
   let previewMonitor;
   const previewUrl = new URL('../../preview.html', import.meta.url);
   previewUrl.hash = crypto.randomUUID();
   const previewChannel = new BroadcastChannel(
     `tailwind-editor-preview:${previewUrl.hash.slice(1)}`,
   );
+  const previewRenderer = createPreviewRenderer($('#preview'));
   previewChannel.addEventListener('message', ({ data }) => {
     if (data?.type === 'ready') {
       previewReady = true;
@@ -291,7 +297,9 @@ export async function start() {
   function showPreview(result) {
     clearRenderError();
     $('#compile-status').title = '';
-    $('#preview').srcdoc = result.html;
+    previewHtml = result.html;
+    previewDocumentId = workspace.activeId;
+    previewRenderer.render(previewHtml, previewDocumentId);
     updatePopout(result.html);
     $('#css-size').textContent = size(result.css);
     $('#compile-status').textContent = `Live preview · ${result.classes} unique classes`;
@@ -319,10 +327,13 @@ export async function start() {
   }
 
   function restoreInlinePreview() {
+    const wasDetached = Boolean(previewWindow);
     clearInterval(previewMonitor);
     previewWindow = null;
     previewReady = false;
     setPreviewDetached(false);
+    if (wasDetached && previewDocumentId)
+      previewRenderer.render(previewHtml, previewDocumentId, { force: true });
   }
 
   function checkPopout() {
@@ -342,38 +353,54 @@ export async function start() {
     return true;
   }
 
-  function updatePopout(html = $('#preview').srcdoc) {
+  function updatePopout(html = previewHtml) {
     if (!checkPopout()) return;
     previewChannel.postMessage({
       type: 'render',
       html,
+      documentId: previewDocumentId,
       title: `Live preview · ${activeDocument().name}`,
     });
   }
 
   function renderDocuments() {
     $('#document-list').replaceChildren();
-    workspace.documents.forEach((item) => {
+    const folders = new Map(workspace.folders.map((folder) => [folder.id, folder.name]));
+    recentDocuments(workspace).slice(0, 6).forEach((item, index) => {
       const button = document.createElement('button');
       button.className = 'document-item';
       button.setAttribute('aria-current', String(item.id === workspace.activeId));
-      button.title = item.name;
+      const folderName = folders.get(item.folderId) || 'Unfiled';
+      button.title = `${folderName} / ${item.name}`;
       const icon = document.createElement('span');
       icon.className = 'file-icon';
       icon.textContent = '◇';
+      const label = document.createElement('span');
+      label.className = 'document-item-label';
+      const folder = document.createElement('small');
+      folder.className = 'document-folder';
+      folder.id = `recent-folder-${index}`;
+      folder.textContent = folderName;
+      // Keep the document name as the button's name and expose its folder as a description.
+      folder.setAttribute('aria-hidden', 'true');
+      button.setAttribute('aria-describedby', folder.id);
       const name = document.createElement('span');
+      name.className = 'document-item-name';
       name.textContent = item.name;
-      button.append(icon, name);
+      label.append(folder, name);
+      button.append(icon, label);
       button.addEventListener('click', () => openDocument(item.id));
       $('#document-list').append(button);
     });
     $('#document-name').textContent = activeDocument().name;
+    $('#library-count').textContent = workspace.documents.length;
     updatePopout();
   }
 
   function openDocument(id) {
     clearRenderError();
     workspace.activeId = id;
+    activeDocument().lastOpenedAt = Date.now();
     pendingEditorTransforms = false;
     editingBoundary = false;
     pendingRenderError = false;
@@ -383,8 +410,10 @@ export async function start() {
     refresh();
   }
 
-  function askName(title, initial, action) {
+  function askName(title, initial, action, { folder = false } = {}) {
     nameAction = action;
+    namingFolder = folder;
+    $('#name-label').textContent = folder ? 'Folder name' : 'Document name';
     $('#name-title').textContent = title;
     $('#name-input').value = initial;
     $('#name-dialog').showModal();
@@ -546,18 +575,28 @@ export async function start() {
     },
   });
 
+  function createDocument(name, folderId = null) {
+    const document = newDocument(name, '', getTheme());
+    document.folderId = folderId;
+    workspace.documents.push(document);
+    openDocument(document.id);
+  }
+
+  const library = bindDocumentLibrary({
+    workspace, save, openDocument, renderDocuments, askName, createDocument,
+  });
+
   const actions = {
     ...transformations.actions,
+    library: () => library.show(),
     'toggle-documents': () => {
       workspace.settings.sidebarCollapsed = !workspace.settings.sidebarCollapsed;
       applySidebarState();
       save();
     },
     new: () =>
-      askName('New document', 'Untitled.html', (name) => {
-        const document = newDocument(name, '', getTheme());
-        workspace.documents.push(document);
-        openDocument(document.id);
+      askName('New document', 'Untitled', (name) => {
+        createDocument(name);
       }),
     rename: () =>
       askName('Rename document', activeDocument().name, (name) => {
@@ -568,7 +607,7 @@ export async function start() {
     duplicate: () => {
       const copy = structuredClone(activeDocument());
       copy.id = crypto.randomUUID();
-      copy.name = copy.name.replace(/\.html?$/i, '') + ' copy.html';
+      copy.name = `${copy.name} copy`;
       workspace.documents.push(copy);
       openDocument(copy.id);
     },
@@ -576,7 +615,7 @@ export async function start() {
       if (!confirm(`Delete "${activeDocument().name}" from this workspace?`)) return;
       workspace.documents = workspace.documents.filter((item) => item.id !== workspace.activeId);
       if (!workspace.documents.length)
-        workspace.documents.push(newDocument('Untitled.html', '', getTheme()));
+        workspace.documents.push(newDocument('Untitled', '', getTheme()));
       openDocument(workspace.documents[0].id);
     },
     'import-html': () =>
@@ -618,7 +657,7 @@ export async function start() {
       $('#palette-json').value = JSON.stringify(themeColors(getTheme()), null, 2);
     },
     transformations: () => {
-      transformations.render();
+      transformations.render({ resetGroups: true });
       $('#transform-dialog').showModal();
     },
     export: prepareExport,
@@ -687,7 +726,7 @@ export async function start() {
       $('#name-input').focus();
       return;
     }
-    nameAction(/\.html?$/i.test(name) ? name : `${name}.html`);
+    nameAction(namingFolder ? name : documentName(name));
     $('#name-dialog').close();
   });
   $('#custom-theme-form').addEventListener('submit', (event) => {
@@ -751,6 +790,23 @@ export async function start() {
       else if (!$('dialog[open]')) prepareExport().catch(notify);
     }
   });
+  // Capture Alt+Z before Monaco toggles its own unsaved word-wrap option.
+  document.addEventListener('keydown', (event) => {
+    if (
+      (event.code !== 'KeyZ' && event.key.toLowerCase() !== 'z') ||
+      !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+      event.isComposing || editor.getEditingState().composing
+    ) return;
+    const dialog = $('dialog[open]');
+    if (dialog && dialog.id !== 'settings-dialog') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.repeat) return;
+    workspace.settings.wordWrap = !workspace.settings.wordWrap;
+    $('#word-wrap').checked = workspace.settings.wordWrap;
+    applyTheme();
+    save();
+  }, { capture: true });
   // Capture formatting shortcuts before Monaco's built-in formatter can run.
   document.addEventListener('keydown', (event) => {
     if (
