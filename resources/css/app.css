@@ -265,11 +265,29 @@ hr {
   font-size: 12px;
   text-align: left;
 }
-.document-item span:last-child {
+.document-item-label {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+.document-item-name,
+.document-folder {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.document-folder {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
 .file-icon {
+  flex-shrink: 0;
   color: var(--muted);
   font-size: 13px;
   font-family: monospace;

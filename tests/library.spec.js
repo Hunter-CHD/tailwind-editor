@@ -66,6 +66,8 @@ for (const mobile of [false, true]) {
     await marketing.locator('.library-document-open').click();
     await expect(library).not.toBeVisible();
     await expect(page.locator('#document-list button').first()).toContainText('Marketing');
+    await expect(page.locator('#document-list button').first()).toHaveAccessibleDescription('Landing pages');
+    await expect(page.locator('#document-list .document-folder').first()).toHaveText('Landing pages');
     await expect(page.locator('#save-status')).toHaveText('All changes saved');
     await page.reload();
     await expect(page.locator('#compile-status')).toContainText('Live preview');
@@ -87,6 +89,7 @@ for (const mobile of [false, true]) {
     await expect(page.locator('#library-folder-title')).toHaveText('Unfiled');
     await expect(page.locator('#library-results li')).toHaveCount(10);
     await expect(marketing.getByRole('combobox')).toHaveValue('');
+    await expect(page.locator('#document-list .document-folder').first()).toHaveText('Unfiled');
   });
 }
 

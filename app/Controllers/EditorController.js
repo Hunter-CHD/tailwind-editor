@@ -365,17 +365,30 @@ export async function start() {
 
   function renderDocuments() {
     $('#document-list').replaceChildren();
-    recentDocuments(workspace).slice(0, 6).forEach((item) => {
+    const folders = new Map(workspace.folders.map((folder) => [folder.id, folder.name]));
+    recentDocuments(workspace).slice(0, 6).forEach((item, index) => {
       const button = document.createElement('button');
       button.className = 'document-item';
       button.setAttribute('aria-current', String(item.id === workspace.activeId));
-      button.title = item.name;
+      const folderName = folders.get(item.folderId) || 'Unfiled';
+      button.title = `${folderName} / ${item.name}`;
       const icon = document.createElement('span');
       icon.className = 'file-icon';
       icon.textContent = '◇';
+      const label = document.createElement('span');
+      label.className = 'document-item-label';
+      const folder = document.createElement('small');
+      folder.className = 'document-folder';
+      folder.id = `recent-folder-${index}`;
+      folder.textContent = folderName;
+      // Keep the document name as the button's name and expose its folder as a description.
+      folder.setAttribute('aria-hidden', 'true');
+      button.setAttribute('aria-describedby', folder.id);
       const name = document.createElement('span');
+      name.className = 'document-item-name';
       name.textContent = item.name;
-      button.append(icon, name);
+      label.append(folder, name);
+      button.append(icon, label);
       button.addEventListener('click', () => openDocument(item.id));
       $('#document-list').append(button);
     });
