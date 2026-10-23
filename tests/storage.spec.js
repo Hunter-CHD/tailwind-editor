@@ -593,7 +593,7 @@ test('schema 2 inline transformations migrate atomically and retain IDs and enab
         transaction.objectStore('documentFiles').put({
           id: document.id,
           hash,
-          file: new File([document.content], document.name, { type: 'text/html;charset=utf-8' }),
+          file: new File([document.content], `${document.name}.html`, { type: 'text/html;charset=utf-8' }),
         });
         const { content, ...metadata } = document;
         transaction.objectStore('documentMetadata').put(metadata);
