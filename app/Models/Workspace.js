@@ -169,6 +169,7 @@ async function writeWorkspace(workspace) {
     documentIds: workspace.documents.map((item) => item.id),
     activeId: workspace.activeId,
     folders: workspace.folders || [],
+    pinnedDocumentIds: workspace.pinnedDocumentIds || [],
     settings: workspace.settings,
     transformationIds: transformations.map((item) => item.id),
   };
@@ -333,6 +334,9 @@ export function validateWorkspace(value) {
     version: 1,
     documents,
     folders: folders.map(({ id, name }) => ({ id, name: name.trim() })),
+    pinnedDocumentIds: Array.isArray(value.pinnedDocumentIds)
+      ? [...new Set(value.pinnedDocumentIds)].filter((id) => documents.some((item) => item.id === id))
+      : [],
     settings,
     activeId: documents.some((item) => item.id === value.activeId)
       ? value.activeId

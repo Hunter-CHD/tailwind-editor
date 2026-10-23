@@ -235,13 +235,61 @@ hr {
   justify-content: space-between;
   padding: 0 7px 12px;
 }
-.sidebar-heading h1 {
+.sidebar-heading h1,
+.sidebar-heading h2 {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
   font-weight: 600;
   color: var(--muted);
   margin: 0;
+}
+.sidebar-documents {
+  min-height: 0;
+  overflow-y: auto;
+}
+#pinned-section {
+  margin-bottom: 14px;
+}
+.document-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.document-row .document-item {
+  flex: 1;
+  min-width: 0;
+}
+.document-context-menu {
+  position: fixed;
+  z-index: 30;
+  width: min(190px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 28px #0003;
+}
+.document-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+}
+.document-context-menu button:hover,
+.document-context-menu button:focus-visible {
+  background: var(--selection);
+  color: var(--accent);
+}
+.document-context-menu [data-document-menu='delete'] {
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 4px 4px;
+  margin-top: 4px;
 }
 .document-list {
   display: flex;
@@ -1189,6 +1237,7 @@ dialog::backdrop {
     padding: 0;
   }
   .sidebar-heading h1,
+  .sidebar-heading h2,
   .local-note,
   .import-button span,
   .sidebar-bottom > button > span {
@@ -1198,6 +1247,33 @@ dialog::backdrop {
     flex: 1;
     flex-direction: row;
     min-width: 0;
+  }
+  .sidebar-documents {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+    overflow: hidden;
+  }
+  #recent-section,
+  #pinned-section[data-active='true'] {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex: 1;
+    gap: 8px;
+    margin: 0;
+  }
+  #pinned-section,
+  .document-row:not([data-active='true']) {
+    display: none;
+  }
+  #recent-section[data-active='false'] {
+    flex: 0 0 30px;
+  }
+  #recent-section[data-active='false'] .document-list {
+    display: none;
   }
   .document-item:not([aria-current='true']) {
     display: none;

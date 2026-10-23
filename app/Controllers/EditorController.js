@@ -12,7 +12,9 @@ import { runTransformations } from '../Services/Transformations.js';
 import { inspectHtml, affectsEditingRegion } from '../Services/Html.js';
 import { bindThemeColorPicker } from '../Services/ThemeColorPicker.js';
 import { bindTransformations } from './TransformationController.js';
-import { bindDocumentLibrary, recentDocuments } from './DocumentLibraryController.js';
+import { bindDocumentLibrary } from './DocumentLibraryController.js';
+import { bindDocumentSidebar } from './DocumentSidebarController.js';
+import { bindDocumentContextMenu } from './DocumentContextMenu.js';
 import { createPreviewRenderer } from '../Services/Preview.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -72,6 +74,7 @@ export async function start() {
 
   applySidebarState();
   const activeDocument = () => workspace.documents.find((item) => item.id === workspace.activeId);
+  const documentSidebar = bindDocumentSidebar({ workspace, openDocument, save });
   const editor = await createEditor($('#editor'), workspace.settings, (content) => {
     clearRenderError();
     activeDocument().content = content;
@@ -364,34 +367,7 @@ export async function start() {
   }
 
   function renderDocuments() {
-    $('#document-list').replaceChildren();
-    const folders = new Map(workspace.folders.map((folder) => [folder.id, folder.name]));
-    recentDocuments(workspace).slice(0, 6).forEach((item, index) => {
-      const button = document.createElement('button');
-      button.className = 'document-item';
-      button.setAttribute('aria-current', String(item.id === workspace.activeId));
-      const folderName = folders.get(item.folderId) || 'Unfiled';
-      button.title = `${folderName} / ${item.name}`;
-      const icon = document.createElement('span');
-      icon.className = 'file-icon';
-      icon.textContent = '◇';
-      const label = document.createElement('span');
-      label.className = 'document-item-label';
-      const folder = document.createElement('small');
-      folder.className = 'document-folder';
-      folder.id = `recent-folder-${index}`;
-      folder.textContent = folderName;
-      // Keep the document name as the button's name and expose its folder as a description.
-      folder.setAttribute('aria-hidden', 'true');
-      button.setAttribute('aria-describedby', folder.id);
-      const name = document.createElement('span');
-      name.className = 'document-item-name';
-      name.textContent = item.name;
-      label.append(folder, name);
-      button.append(icon, label);
-      button.addEventListener('click', () => openDocument(item.id));
-      $('#document-list').append(button);
-    });
+    documentSidebar.render();
     $('#document-name').textContent = activeDocument().name;
     $('#library-count').textContent = workspace.documents.length;
     updatePopout();
@@ -582,8 +558,39 @@ export async function start() {
     openDocument(document.id);
   }
 
+  function renameDocument(id) {
+    const item = workspace.documents.find((item) => item.id === id);
+    askName('Rename document', item.name, (name) => {
+      item.name = name;
+      renderDocuments();
+      save();
+    });
+  }
+
+  function duplicateDocument(id) {
+    const copy = structuredClone(workspace.documents.find((item) => item.id === id));
+    copy.id = crypto.randomUUID();
+    copy.name = `${copy.name} copy`;
+    workspace.documents.push(copy);
+    openDocument(copy.id);
+  }
+
+  function deleteDocument(id) {
+    const item = workspace.documents.find((item) => item.id === id);
+    if (!confirm(`Delete "${item.name}" from this workspace?`)) return;
+    workspace.documents = workspace.documents.filter((item) => item.id !== id);
+    if (!workspace.documents.length) createDocument('Untitled');
+    else if (workspace.activeId === id) openDocument(workspace.documents[0].id);
+    else { renderDocuments(); save(); }
+  }
+
+  bindDocumentContextMenu({
+    workspace, togglePin: documentSidebar.togglePin, renameDocument, duplicateDocument, deleteDocument,
+  });
+
   const library = bindDocumentLibrary({
     workspace, save, openDocument, renderDocuments, askName, createDocument,
+    togglePin: documentSidebar.togglePin,
   });
 
   const actions = {
@@ -598,26 +605,9 @@ export async function start() {
       askName('New document', 'Untitled', (name) => {
         createDocument(name);
       }),
-    rename: () =>
-      askName('Rename document', activeDocument().name, (name) => {
-        activeDocument().name = name;
-        renderDocuments();
-        save();
-      }),
-    duplicate: () => {
-      const copy = structuredClone(activeDocument());
-      copy.id = crypto.randomUUID();
-      copy.name = `${copy.name} copy`;
-      workspace.documents.push(copy);
-      openDocument(copy.id);
-    },
-    delete: () => {
-      if (!confirm(`Delete "${activeDocument().name}" from this workspace?`)) return;
-      workspace.documents = workspace.documents.filter((item) => item.id !== workspace.activeId);
-      if (!workspace.documents.length)
-        workspace.documents.push(newDocument('Untitled', '', getTheme()));
-      openDocument(workspace.documents[0].id);
-    },
+    rename: () => renameDocument(workspace.activeId),
+    duplicate: () => duplicateDocument(workspace.activeId),
+    delete: () => deleteDocument(workspace.activeId),
     'import-html': () =>
       pickFile('.html,.htm,text/html,text/plain', async (file) => {
         const document = newDocument(file.name, await file.text(), getTheme());
@@ -681,6 +671,7 @@ export async function start() {
           item.enabled = false;
         });
         Object.assign(workspace, restored);
+        documentSidebar.resetSession();
         storageReady = true;
         applySidebarState();
         openDocument(workspace.activeId);

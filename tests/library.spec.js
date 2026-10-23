@@ -23,8 +23,8 @@ for (const mobile of [false, true]) {
   test(`document library organizes, searches, and persists documents on ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
     if (mobile) await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);
-    await expect(page.locator('#document-list button')).toHaveCount(6);
-    await expect(page.locator('#document-list button').first()).toContainText('Document 8');
+    await expect(page.locator('#document-list .document-item')).toHaveCount(6);
+    await expect(page.locator('#document-list .document-item').first()).toContainText('Document 8');
     await page.locator('[data-action="library"]').click();
     const library = page.locator('#library-dialog');
     await expect(library).toBeVisible();
@@ -65,13 +65,13 @@ for (const mobile of [false, true]) {
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
     await marketing.locator('.library-document-open').click();
     await expect(library).not.toBeVisible();
-    await expect(page.locator('#document-list button').first()).toContainText('Marketing');
-    await expect(page.locator('#document-list button').first()).toHaveAccessibleDescription('Landing pages');
+    await expect(page.locator('#document-list .document-item').first()).toContainText('Marketing');
+    await expect(page.locator('#document-list .document-item').first()).toHaveAccessibleDescription('Landing pages');
     await expect(page.locator('#document-list .document-folder').first()).toHaveText('Landing pages');
     await expect(page.locator('#save-status')).toHaveText('All changes saved');
     await page.reload();
     await expect(page.locator('#compile-status')).toContainText('Live preview');
-    await expect(page.locator('#document-list button').first()).toContainText('Marketing');
+    await expect(page.locator('#document-list .document-item').first()).toContainText('Marketing');
     await page.locator('[data-action="library"]').click();
     await page.locator('#library-folders button').filter({ hasText: 'Landing pages' }).click();
     await expect(page.locator('#library-results li')).toHaveCount(1);

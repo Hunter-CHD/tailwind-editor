@@ -90,6 +90,7 @@ export function newWorkspace() {
     version: 1,
     documents: [document],
     folders: [],
+    pinnedDocumentIds: [],
     activeId: document.id,
     transformations: [],
     settings: {

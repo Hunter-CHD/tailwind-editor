@@ -6,7 +6,7 @@ export function recentDocuments(workspace) {
     b.lastOpenedAt - a.lastOpenedAt);
 }
 
-export function bindDocumentLibrary({ workspace, save, openDocument, renderDocuments, askName, createDocument }) {
+export function bindDocumentLibrary({ workspace, save, openDocument, renderDocuments, askName, createDocument, togglePin }) {
   const dialog = $('#library-dialog');
   // Null means all documents; an empty string means unfiled. Folder IDs are nonempty strings.
   let selectedFolder = null;
@@ -26,8 +26,8 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
   }
 
   function changed() {
-    save();
     renderDocuments();
+    save();
     render();
   }
 
@@ -97,9 +97,17 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
         $('#library-search').focus();
       });
       remove.setAttribute('aria-label', `Delete ${item.name}`);
+      const pinned = workspace.pinnedDocumentIds.includes(item.id);
+      const pin = button(pinned ? 'Unpin' : 'Pin', () => {
+        togglePin(item.id);
+        render();
+        $('#library-search').focus();
+      });
+      pin.setAttribute('aria-label', `${pinned ? 'Unpin' : 'Pin'} ${item.name}`);
+      pin.setAttribute('aria-pressed', String(pinned));
       const actions = document.createElement('div');
       actions.className = 'library-document-actions';
-      actions.append(move, rename, remove);
+      actions.append(move, pin, rename, remove);
       row.append(open, actions);
       list.append(row);
     }
