@@ -13,6 +13,7 @@ import { inspectHtml, affectsEditingRegion } from '../Services/Html.js';
 import { bindThemeColorPicker } from '../Services/ThemeColorPicker.js';
 import { bindTransformations } from './TransformationController.js';
 import { bindDocumentLibrary, recentDocuments } from './DocumentLibraryController.js';
+import { createPreviewRenderer } from '../Services/Preview.js';
 
 const $ = (selector) => document.querySelector(selector);
 const size = (text) => `${(new Blob([text]).size / 1024).toFixed(1)} KB`;
@@ -39,12 +40,15 @@ export async function start() {
   let fileHandler;
   let previewWindow;
   let previewReady = false;
+  let previewHtml = '';
+  let previewDocumentId;
   let previewMonitor;
   const previewUrl = new URL('../../preview.html', import.meta.url);
   previewUrl.hash = crypto.randomUUID();
   const previewChannel = new BroadcastChannel(
     `tailwind-editor-preview:${previewUrl.hash.slice(1)}`,
   );
+  const previewRenderer = createPreviewRenderer($('#preview'));
   previewChannel.addEventListener('message', ({ data }) => {
     if (data?.type === 'ready') {
       previewReady = true;
@@ -293,7 +297,9 @@ export async function start() {
   function showPreview(result) {
     clearRenderError();
     $('#compile-status').title = '';
-    $('#preview').srcdoc = result.html;
+    previewHtml = result.html;
+    previewDocumentId = workspace.activeId;
+    previewRenderer.render(previewHtml, previewDocumentId);
     updatePopout(result.html);
     $('#css-size').textContent = size(result.css);
     $('#compile-status').textContent = `Live preview · ${result.classes} unique classes`;
@@ -321,10 +327,13 @@ export async function start() {
   }
 
   function restoreInlinePreview() {
+    const wasDetached = Boolean(previewWindow);
     clearInterval(previewMonitor);
     previewWindow = null;
     previewReady = false;
     setPreviewDetached(false);
+    if (wasDetached && previewDocumentId)
+      previewRenderer.render(previewHtml, previewDocumentId, { force: true });
   }
 
   function checkPopout() {
@@ -344,11 +353,12 @@ export async function start() {
     return true;
   }
 
-  function updatePopout(html = $('#preview').srcdoc) {
+  function updatePopout(html = previewHtml) {
     if (!checkPopout()) return;
     previewChannel.postMessage({
       type: 'render',
       html,
+      documentId: previewDocumentId,
       title: `Live preview · ${activeDocument().name}`,
     });
   }
