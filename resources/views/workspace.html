@@ -14,11 +14,19 @@
     <button data-action="library" class="library-toggle" aria-haspopup="dialog" aria-controls="library-dialog">
       <span>All documents</span><span id="library-count" class="count">0</span>
     </button>
-    <div class="sidebar-heading">
-      <h1>Recent</h1>
-      <button data-action="new" class="icon-button" aria-label="New document">+</button>
+    <div class="sidebar-documents">
+      <section id="pinned-section" aria-labelledby="pinned-heading" hidden>
+        <div class="sidebar-heading"><h2 id="pinned-heading">Pinned</h2></div>
+        <div id="pinned-list" class="document-list"></div>
+      </section>
+      <section id="recent-section" aria-labelledby="recent-heading">
+        <div class="sidebar-heading">
+          <h1 id="recent-heading">Recent</h1>
+          <button data-action="new" class="icon-button" aria-label="New document">+</button>
+        </div>
+        <div id="document-list" class="document-list"></div>
+      </section>
     </div>
-    <div id="document-list" class="document-list"></div>
     <div class="sidebar-bottom">
       <button data-action="import-html" class="import-button" aria-label="Import HTML">
         <span class="icon">↑</span> <span>Import HTML</span>
@@ -31,6 +39,12 @@
         <span class="status-dot"></span>
         <div>Stored on this device<small>Your work saves automatically.</small></div>
       </div>
+    </div>
+    <div id="document-context-menu" class="document-context-menu" role="menu" aria-label="Document actions" hidden>
+      <button type="button" role="menuitem" tabindex="-1" data-document-menu="pin">Pin document</button>
+      <button type="button" role="menuitem" tabindex="-1" data-document-menu="rename">Rename</button>
+      <button type="button" role="menuitem" tabindex="-1" data-document-menu="duplicate">Duplicate</button>
+      <button type="button" role="menuitem" tabindex="-1" data-document-menu="delete">Delete</button>
     </div>
   </aside>
   <section class="work-area" aria-label="Editor workspace">
