@@ -115,6 +115,8 @@ Use these as `bg-background`, `bg-surface`, `text-text`, `hover:bg-accent/80`, a
 
 ## Transformations
 
+See the [Transformation API reference](reference/transformations.html) for handler arguments, execution rules, JSON imports, and complete authoring examples. The [reference library](reference/index.html) also includes [editor and document settings](reference/settings.html). Serve these pages on the workspace's HTTP origin to use the saved editor theme.
+
 Each transformation has a name, input type, stage, enabled flag, and automatic/manual trigger. The navigator groups transformations by stage and lets you enable them without opening their code. Click a stage heading to expand or collapse it. Each time the menu opens, Editor starts expanded and Preview + export and Export only start collapsed. Adding or importing a transformation, or changing its stage, expands its destination group. Select a transformation to edit its settings and code; the menu remembers your selection when you reopen it during the same session. On narrow screens, use **All transformations** to return to the navigator. The arrow buttons reorder the selected transformation within its stage. Stages always run editor → preview → export; order within each stage follows the navigator.
 
 | Stage            | When it runs                                                                   | What it changes      |
@@ -139,7 +141,10 @@ Edit `document` directly, with no return value:
 document.querySelectorAll('[editor-meta]').forEach((element) => element.remove());
 
 document.querySelectorAll('a[target="_blank"]').forEach((link) => {
-  link.relList.add('noopener', 'noreferrer');
+  const rel = new Set((link.getAttribute('rel') || '').split(/\s+/).filter(Boolean));
+  rel.add('noopener');
+  rel.add('noreferrer');
+  link.setAttribute('rel', [...rel].join(' '));
 });
 ```
 

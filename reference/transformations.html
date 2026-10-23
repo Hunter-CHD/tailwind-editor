@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transformation API reference · Tailwind Editor</title>
+  <link rel="stylesheet" href="../resources/css/app.css">
+  <link rel="stylesheet" href="./reference.css">
+  <script type="module" src="./theme.js"></script>
+</head>
+
+<body class="reference-page">
+  <header class="app-header">
+    <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">&lt;/&gt;</span><span>Tailwind <strong>Editor</strong></span></a>
+    <span class="subtle">Transformation reference</span>
+  </header>
+  <div class="reference-layout">
+    <nav class="reference-nav" aria-label="On this page">
+      <a href="./index.html">All references</a>
+      <a href="./settings.html">Editor &amp; document settings</a>
+      <strong>On this page</strong>
+      <a href="#quick-start">Quick start</a>
+      <a href="#stages">Stages &amp; execution order</a>
+      <a href="#dom">Shared DOM API</a>
+      <a href="#string">String API</a>
+      <a href="#commands">Comment command API</a>
+      <a href="#context">Context &amp; async code</a>
+      <a href="#recipes">Example recipes</a>
+      <a href="#json">JSON import &amp; fields</a>
+      <a href="#runtime">Runtime &amp; serialization</a>
+      <a href="#safety">Readiness &amp; errors</a>
+      <a href="#service">Pipeline service API</a>
+      <a href="#sources">Implementation sources</a>
+    </nav>
+    <main class="reference-content" id="main">
+      <div class="reference-intro">
+        <span class="reference-eyebrow">Authoring guide / API reference</span>
+        <h1>Write a transformation</h1>
+        <p>Transformations are JavaScript function bodies that modify HTML before it is saved, previewed, or exported. Choose shared DOM mutations, a string replacement, or a handler invoked by HTML comments.</p>
+        <p>Transformations apply to the active HTML document. Use <code>context.name</code> when a transformation should only affect a particular document.</p>
+      </div>
+
+      <section id="quick-start">
+        <h2>Quick start</h2>
+        <ol>
+          <li>Open <strong>Transformations</strong> in the editor sidebar and add a transformation.</li>
+          <li>Give it a name, choose <strong>Shared DOM</strong>, and set the stage to <strong>Preview + export</strong>.</li>
+          <li>Paste the function body below into the code field. Do not add an enclosing function, script tag, or module export.</li>
+          <li>With ready HTML, click <strong>Run once</strong> to inspect a temporary preview. This works even while the transformation is disabled.</li>
+          <li>Enable it and choose <strong>Automatic</strong> to include it in subsequent previews and exports.</li>
+        </ol>
+        <pre><code>// Input: &lt;a href="/offers" target="_blank"&gt;Offers&lt;/a&gt;
+document.querySelectorAll('a[target="_blank"]').forEach((link) =&gt; {
+  const rel = new Set((link.getAttribute('rel') || '').split(/\s+/).filter(Boolean));
+  rel.add('noopener');
+  rel.add('noreferrer');
+  link.setAttribute('rel', [...rel].join(' '));
+});
+// Output includes rel="noopener noreferrer". No return statement.</code></pre>
+        <p class="reference-note">New transformations start disabled with Shared DOM input, Automatic trigger, and Export only stage. Review imported code before enabling it. Workers protect the editor from hanging when running slower operations; they are not a security boundary for untrusted JavaScript.</p>
+      </section>
+
+      <section id="stages">
+        <h2>Stages &amp; execution order</h2>
+        <div class="reference-table">
+          <table>
+            <caption>Stage selection controls persistence and when code runs.</caption>
+            <thead>
+              <tr>
+                <th>Stage / value</th>
+                <th>Automatic</th>
+                <th>Manual / Run once</th>
+                <th>Changes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Editor<br><code>editor</code></td>
+                <td>After a source edit, at a safe line-change or blur boundary.</td>
+                <td>Runs the selected transformation immediately against ready source, even if disabled.</td>
+                <td>Editor source and saved HTML.</td>
+              </tr>
+              <tr>
+                <td>Preview + export<br><code>preview</code></td>
+                <td>Each preview render and when preparing export.</td>
+                <td>Run once adds the selected transformation to a temporary preview. Manual transforms are excluded from ordinary export.</td>
+                <td>Output only; source stays intact.</td>
+              </tr>
+              <tr>
+                <td>Export only<br><code>export</code></td>
+                <td>Every enabled transformation runs when Export opens.</td>
+                <td>Trigger is ignored; Run once is disabled.</td>
+                <td>Frozen export snapshot only.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Stages run in the order <strong>editor → preview → export</strong>. Within a stage, workspace list order applies; use the arrow buttons to reorder. Only enabled automatic editor and preview transforms participate in normal automatic runs. Enabling an automatic editor transformation schedules it for the next source edit; Run once applies it immediately.</p>
+        <p>For preview Run once, enabled automatic preview transforms run first. The selected transform is appended unless it is already in that automatic list; it is never run twice in that pipeline. Its temporary result lasts until the next render.</p>
+        <p>Export first handles pending automatic editor changes under the normal editing guards, then runs automatic preview transforms and enabled export-only transforms in one pipeline. A checkpoint after preview transforms refreshes both live previews; export-only mutations are excluded from that checkpoint. Copy and download use the same frozen export and do not rerun code.</p>
+        <p>Transforms run <strong>before CSS generation</strong>. Added utility classes generate CSS; utilities used only by removed elements disappear unless needed elsewhere or listed in the document's Additional classes. Document colors and inline CSS <code>@apply</code> are compiler features, not transformation context fields.</p>
+      </section>
+
+      <section id="dom">
+        <h2>Shared DOM API</h2>
+        <p><strong>Input setting:</strong> Shared DOM · <code>kind: "dom"</code></p>
+        <pre><code>// Effective handler signature (the app supplies the wrapper):
+async function handler(document, context) {
+  // Your code goes here.
+}</code></pre>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Contract</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>document</code></td>
+                <td>The pipeline's mutable LinkeDOM document, not the editor UI document. Query elements, create nodes, update attributes, and move or remove content.</td>
+              </tr>
+              <tr>
+                <td><code>context</code></td>
+                <td>Frozen object with the HTML document name and this transform's stage. See Context below.</td>
+              </tr>
+              <tr>
+                <td>Return value</td>
+                <td>Must be <code>undefined</code>. Omit return or use a bare <code>return;</code>. Returning a node, string, null, or other value rejects the pipeline.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Consecutive DOM and comment transformations share exactly the same document object. Changes from earlier handlers are visible to later ones. You do not need to parse input or serialize output.</p>
+        <pre><code>// Remove authoring-only elements. Suggested stage: Export only.
+document.querySelectorAll('[editor-meta]').forEach((element) =&gt; {
+  element.remove();
+});</code></pre>
+        <p>For fragment input, authored elements live in a synthetic <code>document.body</code>. Target the authored wrapper rather than expecting a real page body. For example, use <code>document.querySelector('#content')</code> when your fragment has that ID.</p>
+      </section>
+
+      <section id="string">
+        <h2>String API</h2>
+        <p><strong>Input setting:</strong> String · <code>kind: "string"</code></p>
+        <pre><code>// Effective handler signature:
+async function handler(code, context) {
+  // Must return a string containing the next HTML source.
+}</code></pre>
+        <p><code>code</code> is the current HTML string, including changes made by previous transforms. Return the complete next string, not just a replacement fragment. An empty string is a valid string return. Missing returns and all non-string values reject the pipeline.</p>
+        <pre><code>// Normalize curly double quotes in text and markup.
+return code.replaceAll('\u201c', '"').replaceAll('\u201d', '"');</code></pre>
+        <p>String replacement affects every matching occurrence, including scripts, styles, attributes, and comments. Prefer Shared DOM when the operation depends on HTML structure. A string transform does not get a <code>document</code> parameter.</p>
+      </section>
+
+      <section id="commands">
+        <h2>Comment command API</h2>
+        <p><strong>Input setting:</strong> Comment command · <code>kind: "comment"</code>. Set Command prefix to a bare name such as <code>add-classes</code>, without a colon.</p>
+        <pre><code>&lt;section&gt;
+  &lt;!-- add-classes: rounded-lg p-4; --&gt;
+  &lt;article&gt;First card&lt;/article&gt;
+  Some text between cards
+  &lt;article&gt;Second card&lt;/article&gt;
+&lt;/section&gt;</code></pre>
+        <pre><code>// Effective handler signature:
+async function handler(args, elements, document, context, comment, nodes) {
+  // Mutate the DOM. Do not return a value.
+}</code></pre>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>args</code></td>
+                <td>String after the colon and before the first semicolon, trimmed at both ends. Internal whitespace stays intact. May be empty. No JSON parsing or argument splitting happens automatically.</td>
+              </tr>
+              <tr>
+                <td><code>elements</code></td>
+                <td>Array snapshot of every following direct sibling element through the end of the comment's parent. It does not stop at another command. Descendants remain inside their sibling elements.</td>
+              </tr>
+              <tr>
+                <td><code>document</code></td>
+                <td>Same shared document used by adjacent DOM transforms.</td>
+              </tr>
+              <tr>
+                <td><code>context</code></td>
+                <td>Same frozen name/stage contract as other inputs.</td>
+              </tr>
+              <tr>
+                <td><code>comment</code></td>
+                <td>The calling comment node. It is removed automatically after this invocation succeeds.</td>
+              </tr>
+              <tr>
+                <td><code>nodes</code></td>
+                <td>Array snapshot of every following sibling node, including elements, text, and comments. Use it when preserving text and whitespace matters.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Example: add utility classes</h3>
+        <pre><code>const classes = args.split(/\s+/).filter(Boolean);
+for (const element of elements) {
+  element.classList.add(...classes);
+}</code></pre>
+        <p>With the input above, both articles get <code>class="rounded-lg p-4"</code>, the text stays in place, and the calling comment is consumed in the transformed output.</p>
+        <h3>Matching rules</h3>
+        <ul>
+          <li>Prefixes are case-sensitive and must match <code>^[a-zA-Z_][\w-]*$</code>: an ASCII letter or underscore, then letters, digits, underscores, or hyphens.</li>
+          <li>Comment contents must match <code>^\s*([a-zA-Z_][\w-]*)\s*:([^;]*);\s*$</code>. Whitespace around the prefix, colon, and entire command is allowed.</li>
+          <li>The semicolon is required. Arguments cannot contain a semicolon, even inside quotes. Non-whitespace after it prevents a match.</li>
+          <li>Unknown prefixes and malformed calling comments stay untouched. An invalid configured prefix fails the transform even when no comment matches.</li>
+        </ul>
+        <h3>Lifecycle and ordering</h3>
+        <p>Matching comments are collected in document order at the start of each handler pass. Each connected comment with a parent element runs once. Its sibling arrays are captured immediately before invocation, so earlier mutations affect later calls. Moving a node does not disrupt iteration of an existing array. Detached comments are skipped. Newly inserted command comments wait for a later handler pass.</p>
+        <p>Commands always run automatically and have no Run once button. Allowed stages are Editor and Preview + export. Editor commands consume comments in saved source under the usual editing guards. Preview commands keep calling comments in source and consume them in each output. Imported manual commands normalize to automatic; export-stage commands normalize to preview. When two handlers use the same prefix, the first normally consumes the comments before the second can see them.</p>
+        <p>If any invocation throws or returns a value, the worker rejects the whole pipeline, including earlier mutations and comment removal.</p>
+      </section>
+
+      <section id="context">
+        <h2>Context &amp; async code</h2>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>App-supplied value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>context.name</code></td>
+                <td>Active HTML document's name. This is not the transformation name or ID.</td>
+              </tr>
+              <tr>
+                <td><code>context.stage</code></td>
+                <td><code>"editor"</code>, <code>"preview"</code>, or <code>"export"</code>, from the transformation's target. A preview transform still sees <code>"preview"</code> during export.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The app passes no palette, settings, source URL, selected elements, file ID, or UI objects. Context is frozen with <code>Object.freeze</code>; assigning its properties in the strict-mode handler throws. Do not use it to store state.</p>
+        <pre><code>// Shared DOM: restrict a workspace-wide transform to one document.
+if (context.name !== 'About us') return;
+document.querySelectorAll('[data-company-address]').forEach((element) =&gt; {
+  element.textContent = '42 Wallaby Way';
+});</code></pre>
+        <p>All three inputs support top-level <code>await</code> because the app compiles the body as an async function. Return an awaited string in String mode; return nothing in DOM or comment mode. Network requests, if used, follow browser worker and CORS rules and consume the same execution budget.</p>
+        <pre><code>// String mode: minimal async example, with no external dependency.
+const html = await Promise.resolve(code);
+return html.replaceAll('[[document-name]]', context.name);</code></pre>
+        <p>Each pipeline gets a fresh worker. Variables and worker globals do not persist between renders. Within one DOM pipeline you can attach temporary properties to document or nodes, but those properties disappear if a string boundary causes reparsing.</p>
+      </section>
+
+      <section id="recipes">
+        <h2>Example recipes</h2>
+        <h3>Remove empty class attributes</h3>
+        <p>Shared DOM · Editor · Automatic. This changes saved source; editing guards may defer it until the cursor leaves the affected region or the editor blurs.</p>
+        <pre><code>document.querySelectorAll('[class]').forEach((element) =&gt; {
+  if (!element.getAttribute('class').trim()) {
+    element.removeAttribute('class');
+  }
+});
+// &lt;p class=" "&gt;Hello&lt;/p&gt; becomes &lt;p&gt;Hello&lt;/p&gt;.</code></pre>
+        <h3>Replace an authoring marker with themed markup</h3>
+        <p>Shared DOM · Preview + export · Automatic. Use node APIs for text instead of interpolating it into HTML.</p>
+        <pre><code>document.querySelectorAll('[data-callout]').forEach((element) =&gt; {
+  const label = document.createElement('strong');
+  label.className = 'text-accent';
+  label.textContent = element.getAttribute('data-callout');
+  element.prepend(label, document.createTextNode(' '));
+  element.classList.add('rounded-lg', 'bg-surface', 'p-4');
+  element.removeAttribute('data-callout');
+});
+// Input: &lt;aside data-callout="Tip:"&gt;Book online.&lt;/aside&gt;
+// Output: a styled aside beginning with &lt;strong&gt;Tip:&lt;/strong&gt;.</code></pre>
+        <h3>Wrap heading sections while preserving text</h3>
+        <p>Comment command · prefix <code>sections</code> · Preview + export. Call with <code>&lt;!-- sections: h2; --&gt;</code> before sibling headings and content. Arguments are a CSS selector; an invalid selector rejects the pipeline.</p>
+        <pre><code>const parent = comment.parentElement;
+let wrapper;
+for (const node of nodes) {
+  if (node.nodeType === 1 &amp;&amp; node.matches(args)) {
+    if (wrapper) wrapper.append(document.createTextNode('\n'));
+    wrapper = document.createElement('section');
+    wrapper.className = 'mb-8';
+    wrapper.append(document.createTextNode('\n'));
+    parent.insertBefore(wrapper, node);
+  }
+  if (wrapper) wrapper.append(node);
+}
+if (wrapper) wrapper.append(document.createTextNode('\n'));</code></pre>
+        <p>Content before the first matching heading remains outside the wrappers. Each matching heading starts a new section containing that heading and all following sibling nodes until the next match or the end of the parent.</p>
+        <h3>Keep automatic source edits repeatable</h3>
+        <p>Automatic transforms may run repeatedly. Prefer operations that settle after one application: adding an existing class, setting an attribute, or removing a marker. Unconditionally appending a badge in an Editor transform will duplicate it on later edits; check for an existing badge or consume a marker.</p>
+      </section>
+
+      <section id="json">
+        <h2>JSON import &amp; fields</h2>
+        <p>Transformation import expects a top-level JSON array, not a workspace backup or an object containing a transformations property. Export transformations downloads <code>transformations.json</code>. Import appends records, assigns fresh IDs, preserves array order, and disables all imported transforms regardless of their enabled fields. Restoring a workspace backup also disables imported code; ordinary saved-workspace reloads preserve enabled state.</p>
+        <pre><code>[
+  {
+    "name": "Remove editor metadata",
+    "kind": "dom",
+    "target": "export",
+    "mode": "auto",
+    "enabled": false,
+    "code": "document.querySelectorAll('[editor-meta]').forEach(element =&gt; element.remove());"
+  },
+  {
+    "name": "Add classes from comments",
+    "kind": "comment",
+    "command": "add-classes",
+    "target": "preview",
+    "mode": "auto",
+    "enabled": false,
+    "code": "const classes = args.split(/\\s+/).filter(Boolean); for (const element of elements) element.classList.add(...classes);"
+  }
+]</code></pre>
+        <p>JSON strings require escaping: a JavaScript <code>\s</code> in the code field becomes <code>\\s</code> in JSON, newlines become <code>\n</code>, and double quotes become <code>\&quot;</code>. The in-app code field accepts plain JavaScript without JSON escaping.</p>
+        <div class="reference-table">
+          <table>
+            <caption>Validation and normalization in validateTransformations.</caption>
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Type / values</th>
+                <th>Import behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>name</code></td>
+                <td>Required string</td>
+                <td>Preserved as given; empty strings are accepted.</td>
+              </tr>
+              <tr>
+                <td><code>code</code></td>
+                <td>Required string</td>
+                <td>Function body. Syntax and return contracts are checked at execution, not import.</td>
+              </tr>
+              <tr>
+                <td><code>id</code></td>
+                <td>String</td>
+                <td>Optional for imports; replaced by a UUID. Internal loading with preserveIds retains a nonempty ID and rejects duplicates.</td>
+              </tr>
+              <tr>
+                <td><code>kind</code></td>
+                <td><code>dom</code>, <code>string</code>, <code>comment</code></td>
+                <td>Missing or unrecognized values become <code>string</code>.</td>
+              </tr>
+              <tr>
+                <td><code>target</code></td>
+                <td><code>editor</code>, <code>preview</code>, <code>export</code></td>
+                <td>For DOM/string, missing or unrecognized values become <code>editor</code>. For comments, only editor stays editor; everything else becomes preview.</td>
+              </tr>
+              <tr>
+                <td><code>mode</code></td>
+                <td><code>auto</code>, <code>manual</code></td>
+                <td>Only exact <code>auto</code> stays auto; other values become manual. Comments always become auto. Export ignores mode.</td>
+              </tr>
+              <tr>
+                <td><code>enabled</code></td>
+                <td>Boolean</td>
+                <td>Validator accepts only literal true as enabled; import/restore then forces false.</td>
+              </tr>
+              <tr>
+                <td><code>command</code></td>
+                <td>Comment prefix string</td>
+                <td>Only retained for comment input. Converted to a string and trimmed; prefix validity is checked at runtime.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Unknown fields are dropped by validation. Specify kind, target, and mode explicitly when sharing transforms; legacy defaults differ from the defaults for adding one in the UI.</p>
+      </section>
+
+      <section id="runtime">
+        <h2>Runtime &amp; serialization</h2>
+        <ul>
+          <li>Code executes in a module Web Worker using LinkeDOM <code>0.18.9</code>. Handlers are strict-mode async functions. Static module imports do not belong in a function body.</li>
+          <li>The supplied DOM supports queries and mutations, not rendering. There is no editor window, Monaco instance, layout engine, or reliable browser layout measurement. Authored scripts do not execute as part of DOM transformation parsing.</li>
+          <li>DOM parsing is lazy. String-only transforms operate on strings. The worker still loads its LinkeDOM module dependency before it signals ready.</li>
+          <li>At a DOM → string boundary, the document is serialized. At the next string → DOM boundary, HTML is parsed again. Group DOM/comment transforms together to preserve node identity and avoid extra work.</li>
+          <li>The worker treats source matching <code>/&lt;!doctype\s|&lt;html[\s&gt;]/i</code> as a full document. Other input goes into a synthetic body's innerHTML.</li>
+          <li>Full documents serialize with <code>document.toString()</code>. Fragments serialize as <code>document.head.innerHTML + document.body.innerHTML</code>, without synthetic document wrappers.</li>
+        </ul>
+        <p>DOM round trips can normalize markup and quoting; they do not promise byte-for-byte source preservation. Put intended fragment output inside its authored wrapper rather than modifying synthetic html/body attributes, which are omitted during fragment serialization.</p>
+        <p>The export checkpoint serializes the document but keeps the object alive, so adjacent preview and export DOM handlers share node identity. Separate editor and preview pipelines do not share a document or worker.</p>
+      </section>
+
+      <section id="safety">
+        <h2>Readiness, limits &amp; errors</h2>
+        <p>The source must be <strong>HTML ready</strong> before automatic transforms, Run once, or export. Unfinished quotes, attributes, comments, and required closing tags pause transformations. This is an editing-readiness check, not full HTML conformance or accessibility validation. Fragments, void elements, optional end tags, custom elements/attributes, and SVG are supported.</p>
+        <p>Unfinished source still saves. Automatic preview transforms resume when source is ready. Automatic editor transforms wait for a line change or blur while focused, and protect selected lines plus the entire opening tag surrounding a selection. A conservative change range may defer distant edits until blur. Text composition also pauses execution. Results from stale asynchronous runs cannot overwrite newer typing.</p>
+        <p>Automatic source edits track selections through preceding edits and preserve scroll. Manual transforms restore the same line and column, clamped to the new content; the plain-text fallback restores character offsets.</p>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Failure</th>
+                <th>What happens / what to check</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Wrong return type</td>
+                <td>DOM/comment: remove the return value. String: return the complete string.</td>
+              </tr>
+              <tr>
+                <td>Thrown error or invalid JavaScript</td>
+                <td>The entire worker pipeline rejects; no partial HTML is applied. Error messages identify the transformation name.</td>
+              </tr>
+              <tr>
+                <td>Unsafe/incomplete output</td>
+                <td>The controller checks final pipeline output and the export preview checkpoint. Invalid output cannot replace source or preview.</td>
+              </tr>
+              <tr>
+                <td>Three-second execution limit</td>
+                <td>A single budget covers the whole pipeline, including awaits, parsing, serialization, and handlers. The worker is terminated; reduce work or avoid slow requests.</td>
+              </tr>
+              <tr>
+                <td>Dependency load failure</td>
+                <td>The worker has a separate 15-second startup limit. Serve over HTTP and check the connection to the pinned CDN.</td>
+              </tr>
+              <tr>
+                <td>No visible change</td>
+                <td>Check enabled state, stage, trigger, selector, command spelling/semicolon, ready status, and pending editor boundaries. Export-only changes appear after Export opens.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The last successful preview remains on failure. Success logs show the transformation name and elapsed milliseconds; a comment transform produces one log for its entire pass, even with no matches. Errors and notifications appear inline in the editor status area.</p>
+        <p>Rollback covers returned HTML, not external side effects such as a network request. Run only trusted code and do not use transformations as HTML sanitization for untrusted JavaScript. Scripts in transformed authored HTML may subsequently run in the sandboxed live preview.</p>
+      </section>
+
+      <section id="service">
+        <h2>Pipeline service API</h2>
+        <p>For application code and debugging, the local ES module exports this lower-level function. Normal transformation authors only need the function-body APIs above.</p>
+        <pre><code>import { runTransformations } from '../app/Services/Transformations.js';
+
+const result = await runTransformations(
+  '&lt;p&gt;Before&lt;/p&gt;',
+  [{
+    name: 'Rename text',
+    kind: 'dom',
+    target: 'preview',
+    code: 'document.querySelector("p").textContent = "After";'
+  }],
+  { name: 'Example', stage: 'preview' },
+  1
+);
+// result.code: '&lt;p&gt;After&lt;/p&gt;'
+// result.checkpoint: '&lt;p&gt;After&lt;/p&gt;'
+// result.logs: ['Rename text: … ms']</code></pre>
+        <p><code>runTransformations(code, transformations, context = {}, checkpointAfter = null)</code> returns a Promise resolving to <code>{ code, logs, checkpoint }</code>, or rejects with an Error. Paths in the example are relative to a module in this reference folder.</p>
+        <ul>
+          <li><code>code</code>: input HTML string.</li>
+          <li><code>transformations</code>: already-selected ordered records. This service does not filter enabled flags, mode, or stages and does not normalize imported records.</li>
+          <li><code>context</code>: structured-cloneable values copied to the worker. Each handler receives a shallow frozen copy with stage set to <code>transform.target || context.stage</code>.</li>
+          <li><code>checkpointAfter</code>: number of completed transforms after which to serialize a snapshot. Zero captures the original input; the default null captures none.</li>
+          <li><code>code</code> in the result: final serialized HTML. <code>logs</code>: one timing string per transform. <code>checkpoint</code>: captured HTML or undefined when no checkpoint was reached.</li>
+        </ul>
+        <p>With no transforms, it resolves immediately with unchanged code, empty logs, and checkpoint equal to the input. Each nonempty call creates and terminates a new worker. The service does not perform HTML readiness validation, editing guards, compilation, persistence, or stale-result rejection; the editor controller supplies those behaviors.</p>
+      </section>
+    </main>
+  </div>
+</body>
+
+</html>

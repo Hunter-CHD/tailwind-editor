@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor &amp; document settings · Tailwind Editor</title>
+  <link rel="stylesheet" href="../resources/css/app.css">
+  <link rel="stylesheet" href="./reference.css">
+  <script type="module" src="./theme.js"></script>
+</head>
+
+<body class="reference-page">
+  <header class="app-header">
+    <a class="brand" href="../"><span class="brand-mark" aria-hidden="true">&lt;/&gt;</span><span>Tailwind <strong>Editor</strong></span></a>
+    <span class="subtle">Settings reference</span>
+  </header>
+  <div class="reference-layout">
+    <nav class="reference-nav" aria-label="On this page">
+      <a href="./index.html">All references</a>
+      <a href="./transformations.html">Transformations</a>
+      <strong>On this page</strong>
+      <a href="#scope">Which settings apply where?</a>
+      <a href="#editor">Editor preferences</a>
+      <a href="#themes">Editor themes</a>
+      <a href="#document">Document settings</a>
+      <a href="#preflight">Preflight</a>
+      <a href="#base-size">Tailwind base size</a>
+      <a href="#classes">Additional classes</a>
+      <a href="#colors">Document colors</a>
+      <a href="#storage">Saving &amp; backups</a>
+      <a href="#examples">Configuration examples</a>
+      <a href="#sources">Implementation sources</a>
+    </nav>
+    <main class="reference-content" id="main">
+      <div class="reference-intro">
+        <span class="reference-eyebrow">Configuration / Usage reference</span>
+        <h1>Editor &amp; document settings</h1>
+        <p>Use workspace preferences to make editing comfortable, and document settings to control how each HTML document renders and exports. This guide explains the controls, defaults, saved fields, and practical effects.</p>
+      </div>
+      <section id="scope">
+        <h2>Which settings apply where?</h2>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Where to open</th>
+                <th>Scope</th>
+                <th>Controls</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Header → Settings</td>
+                <td>Workspace-wide editor preferences</td>
+                <td>Editor font size, long-line wrapping, workspace backup and restore.</td>
+              </tr>
+              <tr>
+                <td>Header → Themes</td>
+                <td>Workspace appearance</td>
+                <td>Paper, Midnight, Sand, and a custom editor palette.</td>
+              </tr>
+              <tr>
+                <td>Document toolbar → gear</td>
+                <td>Active document only</td>
+                <td>Preflight, Tailwind base size, additional classes, and document colors.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Workspace appearance changes the interface and Monaco. Document settings affect the inline preview, synchronized popout, and generated export for that document. Each document keeps its own rendering settings when you switch files or change the editor theme.</p>
+      </section>
+      <section id="editor">
+        <h2>Editor preferences</h2>
+        <p>Open <strong>Settings</strong>, adjust these fields, and click <strong>Save settings</strong>. Closing the dialog without saving leaves the form changes unapplied.</p>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Control / saved field</th>
+                <th>Default</th>
+                <th>Behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Editor font size<br><code>settings.fontSize</code></td>
+                <td>14px</td>
+                <td>Allowed range: 11–24px. Changes source editor text size, including the plain-text fallback. Does not change authored HTML or preview text size.</td>
+              </tr>
+              <tr>
+                <td>Wrap long lines<br><code>settings.wordWrap</code></td>
+                <td>true</td>
+                <td>Visually wraps source lines to the editor width without inserting line breaks into HTML. Applies to Monaco and the fallback editor.</td>
+              </tr>
+              <tr>
+                <td>Documents sidebar toggle<br><code>settings.sidebarCollapsed</code></td>
+                <td>false</td>
+                <td>The toolbar toggle hides or shows Documents, including on mobile. Saves immediately as a workspace preference.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><kbd>Alt + Z</kbd> toggles wrapping immediately while editing or while Workspace settings is open. The shortcut is ignored while another dialog is open. Imported workspace preferences clamp font size to 11–24, default wrapping to enabled unless explicitly false, and collapse the sidebar only for literal true.</p>
+      </section>
+      <section id="themes">
+        <h2>Editor themes</h2>
+        <p>Open <strong>Themes</strong> to select Paper, Midnight, Sand, or your saved custom theme. Theme selection applies and saves immediately. Custom colors are applied together when you submit <strong>Save custom theme</strong>.</p>
+        <p>A custom theme has four opaque six-digit hex colors: <code>background</code>, <code>surface</code>, <code>text</code>, and <code>accent</code>. Swatches open the color picker; the fields also accept direct hex entry. Light/dark color scheme is derived from surface brightness.</p>
+        <p>New and imported HTML documents copy these four colors from the current editor theme. Existing documents retain their palettes. To copy a new theme into an existing document, use <strong>Document settings → Import editor theme → Save settings</strong>.</p>
+        <p class="reference-note">Editor font size controls the source editor. Editor theme controls interface appearance. Document colors and Tailwind base size control generated document styling. These settings serve separate purposes.</p>
+      </section>
+      <section id="document">
+        <h2>Document settings</h2>
+        <ol>
+          <li>Select the HTML document you want to configure.</li>
+          <li>Click the gear beside its name. The dialog shows which document you are editing.</li>
+          <li>Adjust Preflight, base size, additional classes, and the palette.</li>
+          <li>Click <strong>Save settings</strong> to validate and apply all fields together.</li>
+        </ol>
+        <p>Invalid palette JSON, invalid color names/values, or an invalid base size keeps the dialog open and reports an inline error. Fix the values and save again. Import editor theme fills the palette form; it does not apply changes until you save.</p>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Saved document field</th>
+                <th>Type / default</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>preflight</code></td>
+                <td>Boolean / true</td>
+                <td>Include generated Tailwind base styles.</td>
+              </tr>
+              <tr>
+                <td><code>tailwindBaseSize</code></td>
+                <td>Number or null / null</td>
+                <td>Optional fixed pixel basis for rem values in generated utility declarations.</td>
+              </tr>
+              <tr>
+                <td><code>safelist</code></td>
+                <td>String / empty</td>
+                <td>Additional space-separated utility classes to generate.</td>
+              </tr>
+              <tr>
+                <td><code>colors</code></td>
+                <td>Object / copy of editor theme colors</td>
+                <td>Named colors available to this document's utilities and @apply.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>These are metadata fields alongside the HTML source in workspace backups. A plain HTML import starts with new document defaults; it does not restore settings from a workspace backup. Document duplication preserves document settings.</p>
+      </section>
+      <section id="preflight">
+        <h2>Include Tailwind base styles (Preflight)</h2>
+        <p>Enabled by default. Preflight provides generated base/reset styling alongside utility CSS. Turn it off when the destination site already provides base styles and you want fewer reset interactions.</p>
+        <p>Disabling Preflight keeps authored styles and utility generation. Preview frames also apply a separate <code>html, body { margin: 0; padding: 0; }</code> baseline, which authored styles can override. That preview-only baseline is excluded from export.</p>
+        <p>Fragment exports scope generated CSS to the detected authored wrapper. Generated html/body Preflight rules are omitted unless the wrapper is an authored html/body element or the input is a full document. Generated scoped styles target descendants; use authored CSS to style the fragment wrapper itself. External stylesheets and authored styles keep their own scope.</p>
+      </section>
+      <section id="base-size">
+        <h2>Override Tailwind base size</h2>
+        <p>Off by default, saved as <code>null</code>. With no override, generated rem values use the page's normal root font size. Enable the checkbox to set a fixed pixel basis for rem values in generated Tailwind utility declarations, including expanded <code>@apply</code>.</p>
+        <p>The field initially shows 16px. Valid values are finite numbers of at least <code>0.01</code>px; decimals are allowed. Turning the override off saves null, regardless of the disabled field's displayed value.</p>
+        <pre><code>&lt;div class="p-4 text-base"&gt;Example&lt;/div&gt;
+// Standard utility values: padding: 1rem; font-size: 1rem.
+// Base size 16: those generated lengths resolve to 16px.
+// Base size 20: those generated lengths resolve to 20px.</code></pre>
+        <p>This helps keep embedded utility sizes consistent when a host site uses a different root font size. Internally, generated rem declaration values use <code>calc(amount * var(--twe-rem))</code> with a generated base variable. The override does not change handwritten rem CSS, inherited text sizes, or the host root font size. Selectors and media conditions are outside this conversion, so it does not rescale responsive breakpoints.</p>
+      </section>
+      <section id="classes">
+        <h2>Additional classes</h2>
+        <p>Enter space-separated utility names in <strong>Additional classes</strong>, saved as <code>safelist</code>. The compiler generates utilities found in HTML automatically, but does not execute authored scripts to discover runtime class names.</p>
+        <pre><code>hidden block bg-accent hover:bg-accent/80 md:grid</code></pre>
+        <p>For example, if a script changes an element from hidden to block, list <code>block</code> here when it is absent from static markup. This generates its CSS without adding the class to any element or changing script behavior. Variants and document color utilities work here too.</p>
+        <p>Classes inserted directly into HTML by a <a href="./transformations.html">transformation</a> are visible to the subsequent compiler. Add classes here for later runtime changes or other cases where the final transformed markup does not contain them. Removing unused entries allows their CSS to disappear when nothing else uses them.</p>
+      </section>
+      <section id="colors">
+        <h2>Document colors</h2>
+        <p>The palette is a JSON object mapping lowercase names to opaque six-digit hex colors. New documents copy the current editor theme's four colors; you can add additional names or replace the palette.</p>
+        <pre><code>{
+  "background": "#f5f6f8",
+  "surface": "#ffffff",
+  "text": "#202b36",
+  "accent": "#0f766e",
+  "brand-secondary": "#1d4ed8"
+}</code></pre>
+        <p>Names match <code>^[a-z][a-z0-9-]*$</code>: start with a lowercase letter, then use lowercase letters, digits, or hyphens. Values must be strings such as <code>"#0f766e"</code>. Short hex, alpha hex, rgb(), named CSS colors, arrays, and comments in JSON are unsupported. An empty object is valid, but removes these custom color names.</p>
+        <pre><code>&lt;main class="bg-background text-text"&gt;
+  &lt;article class="bg-surface border border-accent"&gt;
+    &lt;a class="text-brand-secondary hover:text-accent/80" href="/offers"&gt;
+      View offers
+    &lt;/a&gt;
+  &lt;/article&gt;
+&lt;/main&gt;</code></pre>
+        <p>Default Tailwind colors remain available. Opacity is expressed through utility suffixes such as <code>/80</code>, while saved color values stay opaque. Document colors work in utilities, Additional classes, and inline CSS <code>@apply</code>; they do not automatically replace arbitrary handwritten CSS or create a general-purpose palette API for transformations.</p>
+        <p><strong>Import editor theme</strong> replaces the palette form with the current four editor colors, including removing extra custom names from that form. Save settings to apply the replacement, or close the dialog to discard it.</p>
+      </section>
+      <section id="storage">
+        <h2>Saving &amp; backups</h2>
+        <p>Saved preferences and document metadata persist in the browser's IndexedDB for this origin. Reloading retains them; clearing browser storage can remove them. Hosting on a different origin starts a separate workspace. Files remain browser data until you explicitly download them.</p>
+        <p><strong>Settings → Download backup</strong> downloads <code>tailwind-workspace.json</code> with documents, folders, document colors/settings, transformations, and workspace preferences. <strong>Restore backup</strong> validates a JSON backup and asks before replacing the current workspace. Restored JavaScript transformations are disabled for review.</p>
+        <p>An exported HTML file contains generated styling, not a restorable workspace settings bundle. Keep a JSON backup to preserve editable workspace configuration. The settings dialog's size summary estimates serialized workspace data; it is not an available-storage quota.</p>
+      </section>
+      <section id="examples">
+        <h2>Configuration examples</h2>
+        <h3>Embed a fragment on a client's site</h3>
+        <ol>
+          <li>Open the fragment's Document settings and consider disabling Preflight if the host already supplies reset styles.</li>
+          <li>Enable Tailwind base size at 16px when generated rem lengths should remain independent of the host's root font size.</li>
+          <li>Save a document palette matching the client's brand and use named utilities in the fragment.</li>
+          <li>List classes added only by runtime scripts in Additional classes.</li>
+          <li>Save settings, inspect the preview, and export. Check the result in its destination because host inheritance and surrounding CSS still matter.</li>
+        </ol>
+        <h3>Change editor appearance while retaining document branding</h3>
+        <p>Choose Midnight under Themes. Existing documents keep their current palettes. New HTML documents copy Midnight's colors. To adopt Midnight's colors in an existing document, open its gear dialog, click Import editor theme, then Save settings.</p>
+        <h3>Inspect saved configuration</h3>
+        <p>This partial backup excerpt illustrates the saved fields. It is not a complete importable workspace; use Download backup for the full schema and IDs.</p>
+        <pre><code>{
+  "settings": {
+    "theme": "dark",
+    "fontSize": 16,
+    "wordWrap": true,
+    "sidebarCollapsed": false
+  },
+  "documents": [
+    {
+      "name": "Client fragment",
+      "preflight": false,
+      "tailwindBaseSize": 16,
+      "safelist": "hidden block",
+      "colors": { "brand": "#0f766e" }
+    }
+  ]
+}</code></pre>
+      </section>
+    </main>
+  </div>
+</body>
+
+</html>
