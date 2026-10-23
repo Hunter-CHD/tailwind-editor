@@ -777,6 +777,23 @@ export async function start() {
       else if (!$('dialog[open]')) prepareExport().catch(notify);
     }
   });
+  // Capture Alt+Z before Monaco toggles its own unsaved word-wrap option.
+  document.addEventListener('keydown', (event) => {
+    if (
+      (event.code !== 'KeyZ' && event.key.toLowerCase() !== 'z') ||
+      !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+      event.isComposing || editor.getEditingState().composing
+    ) return;
+    const dialog = $('dialog[open]');
+    if (dialog && dialog.id !== 'settings-dialog') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.repeat) return;
+    workspace.settings.wordWrap = !workspace.settings.wordWrap;
+    $('#word-wrap').checked = workspace.settings.wordWrap;
+    applyTheme();
+    save();
+  }, { capture: true });
   // Capture formatting shortcuts before Monaco's built-in formatter can run.
   document.addEventListener('keydown', (event) => {
     if (
