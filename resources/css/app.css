@@ -712,6 +712,31 @@ dialog::backdrop {
   gap: 16px;
   margin-bottom: 22px;
 }
+.dialog-title { display: flex; align-items: center; gap: 10px; }
+
+.reference-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-decoration: none;
+}
+
+.reference-help:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--selection);
+}
+
 .dialog-heading p {
   margin-bottom: 0;
   font-size: 12px;

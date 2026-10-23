@@ -37,8 +37,8 @@
       <div class="reference-intro">
         <span class="reference-eyebrow">Authoring guide / API reference</span>
         <h1>Write a transformation</h1>
-        <p>Transformations are JavaScript function bodies that modify HTML before it is saved, previewed, or exported. Choose shared DOM mutations, a string replacement, or a handler invoked by HTML comments. This guide describes the current application implementation.</p>
-        <p>Transformations belong to the workspace and apply to its active HTML document. Use <code>context.name</code> when a transformation should only affect a particular document.</p>
+        <p>Transformations are JavaScript function bodies that modify HTML before it is saved, previewed, or exported. Choose shared DOM mutations, a string replacement, or a handler invoked by HTML comments.</p>
+        <p>Transformations apply to the active HTML document. Use <code>context.name</code> when a transformation should only affect a particular document.</p>
       </div>
 
       <section id="quick-start">
@@ -58,7 +58,7 @@ document.querySelectorAll('a[target="_blank"]').forEach((link) =&gt; {
   link.setAttribute('rel', [...rel].join(' '));
 });
 // Output includes rel="noopener noreferrer". No return statement.</code></pre>
-        <p class="reference-note">New transformations start disabled with Shared DOM input, Automatic trigger, and Export only stage. Review imported code before enabling it. Workers protect typing from slow code; they are not a security boundary for untrusted JavaScript.</p>
+        <p class="reference-note">New transformations start disabled with Shared DOM input, Automatic trigger, and Export only stage. Review imported code before enabling it. Workers protect the editor from hanging when running slower operations; they are not a security boundary for untrusted JavaScript.</p>
       </section>
 
       <section id="stages">
@@ -152,7 +152,6 @@ async function handler(code, context) {
         <pre><code>// Normalize curly double quotes in text and markup.
 return code.replaceAll('\u201c', '"').replaceAll('\u201d', '"');</code></pre>
         <p>String replacement affects every matching occurrence, including scripts, styles, attributes, and comments. Prefer Shared DOM when the operation depends on HTML structure. A string transform does not get a <code>document</code> parameter.</p>
-        <p>To migrate an older transform that calls <code>new DOMParser()</code>, choose Shared DOM, remove your parsing and final serialization, and mutate the supplied <code>document</code>. The legacy global <code>DOMParser</code> remains available in the worker.</p>
       </section>
 
       <section id="commands">
@@ -248,8 +247,8 @@ for (const element of elements) {
         <p>The app passes no palette, settings, source URL, selected elements, file ID, or UI objects. Context is frozen with <code>Object.freeze</code>; assigning its properties in the strict-mode handler throws. Do not use it to store state.</p>
         <pre><code>// Shared DOM: restrict a workspace-wide transform to one document.
 if (context.name !== 'About us') return;
-document.querySelectorAll('[data-company-name]').forEach((element) =&gt; {
-  element.textContent = 'City Chevrolet';
+document.querySelectorAll('[data-company-address]').forEach((element) =&gt; {
+  element.textContent = '42 Wallaby Way';
 });</code></pre>
         <p>All three inputs support top-level <code>await</code> because the app compiles the body as an async function. Return an awaited string in String mode; return nothing in DOM or comment mode. Network requests, if used, follow browser worker and CORS rules and consume the same execution budget.</p>
         <pre><code>// String mode: minimal async example, with no external dependency.
@@ -467,21 +466,6 @@ const result = await runTransformations(
           <li><code>code</code> in the result: final serialized HTML. <code>logs</code>: one timing string per transform. <code>checkpoint</code>: captured HTML or undefined when no checkpoint was reached.</li>
         </ul>
         <p>With no transforms, it resolves immediately with unchanged code, empty logs, and checkpoint equal to the input. Each nonempty call creates and terminates a new worker. The service does not perform HTML readiness validation, editing guards, compilation, persistence, or stale-result rejection; the editor controller supplies those behaviors.</p>
-      </section>
-
-      <section id="sources">
-        <h2>Implementation sources</h2>
-        <p>This reference was checked against the repository README, handler worker, orchestration, UI, import validator, and regression coverage. Follow these files when extending the API:</p>
-        <ul>
-          <li><a href="../README.md">README.md</a> — application behavior and transformation overview.</li>
-          <li><a href="../app/Services/TransformationWorker.js">TransformationWorker.js</a> — handler arguments, commands, serialization, context, and return contracts.</li>
-          <li><a href="../app/Services/Transformations.js">Transformations.js</a> — worker lifecycle, result shape, and timeouts.</li>
-          <li><a href="../app/Controllers/EditorController.js">EditorController.js</a> — stage selection, manual execution, readiness, and export checkpoint.</li>
-          <li><a href="../app/Controllers/TransformationController.js">TransformationController.js</a> — UI defaults, ordering, and import/export actions.</li>
-          <li><a href="../app/Models/Workspace.js">Workspace.js</a> — record normalization and persistence.</li>
-          <li><a href="../tests/editor.spec.js">editor.spec.js</a>, <a href="../tests/transformation-menu.spec.js">transformation-menu.spec.js</a>, and <a href="../tests/transform-safety.spec.js">transform-safety.spec.js</a> — behavior checks.</li>
-        </ul>
-        <p class="subtle">Open this page at <code>reference/</code> through the same HTTP origin as the workspace. It imports the workspace stylesheet and saved editor theme. Returning focus to this tab refreshes its theme; no workspace data is changed.</p>
       </section>
     </main>
   </div>
