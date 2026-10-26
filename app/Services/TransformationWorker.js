@@ -1,9 +1,59 @@
-import { DOMParser, parseHTML } from 'https://cdn.jsdelivr.net/npm/linkedom@0.18.9/worker.js';
+import {
+  DOMParser,
+  parseHTML
+} from 'https://cdn.jsdelivr.net/npm/linkedom@0.18.9/worker.js';
 
 globalThis.DOMParser = DOMParser;
-const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
 
-self.onmessage = async ({ data: { code, transformations, context, checkpointAfter } }) => {
+function removeCommand(comment, fragmentBody) {
+  const before = [];
+  const after = [];
+  let previous = comment.previousSibling;
+  let next = comment.nextSibling;
+  while (previous?.nodeType === 3) {
+    before.unshift(previous);
+    previous = previous.previousSibling;
+  }
+  while (next?.nodeType === 3) {
+    after.push(next);
+    next = next.nextSibling;
+  }
+  const left = before.map(node => node.textContent).join('');
+  const right = after.map(node => node.textContent).join('');
+  const indentation = left.match(/[^\S\r\n]*$/)[0];
+  const ending = right.match(/^[^\S\r\n]*(?:\r\n|\r|\n|$)/);
+  // Parent tags count as content; only the fragment body's edges are source boundaries.
+  const startsLine = indentation.length < left.length ?
+    /[\r\n]/.test(left[left.length - indentation.length - 1]) :
+    !previous && comment.parentNode === fragmentBody;
+  const endsLine = ending && (/[\r\n]$/.test(ending[0]) ||
+    (!next && comment.parentNode === fragmentBody));
+  if (startsLine && endsLine) {
+    let remaining = indentation.length;
+    for (const node of before.reverse()) {
+      const count = Math.min(remaining, node.textContent.length);
+      node.textContent = node.textContent.slice(0, node.textContent.length - count);
+      remaining -= count;
+    }
+    remaining = ending[0].length;
+    for (const node of after) {
+      const count = Math.min(remaining, node.textContent.length);
+      node.textContent = node.textContent.slice(count);
+      remaining -= count;
+    }
+  }
+  comment.remove();
+}
+
+self.onmessage = async ({
+  data: {
+    code,
+    transformations,
+    context,
+    checkpointAfter
+  }
+}) => {
   let document = null;
   let fullDocument = false;
   let currentName = '';
@@ -23,9 +73,9 @@ self.onmessage = async ({ data: { code, transformations, context, checkpointAfte
       if (transform.kind === 'dom' || transform.kind === 'comment') {
         if (!document) {
           fullDocument = /<!doctype\s|<html[\s>]/i.test(code);
-          document = fullDocument
-            ? new DOMParser().parseFromString(code, 'text/html')
-            : parseHTML('<!doctype html><html><head></head><body></body></html>').document;
+          document = fullDocument ?
+            new DOMParser().parseFromString(code, 'text/html') :
+            parseHTML('<!doctype html><html><head></head><body></body></html>').document;
           if (!fullDocument) document.body.innerHTML = code;
         }
         if (transform.kind === 'comment') {
@@ -42,9 +92,16 @@ self.onmessage = async ({ data: { code, transformations, context, checkpointAfte
           while (walker.nextNode()) {
             const comment = walker.currentNode;
             const match = comment.textContent.match(/^\s*([a-zA-Z_][\w-]*)\s*:([^;]*);\s*$/);
-            if (match?.[1] === command) commands.push({ comment, args: match[2].trim() });
+            if (match?.[1] === command) commands.push({
+              comment,
+              args: match[2].trim()
+            });
           }
-          for (const { comment, args } of commands) {
+          for (const {
+              comment,
+              args
+            }
+            of commands) {
             if (!document.contains(comment) || !comment.parentElement) continue;
             const nodes = [];
             for (let node = comment.nextSibling; node; node = node.nextSibling) nodes.push(node);
@@ -52,7 +109,7 @@ self.onmessage = async ({ data: { code, transformations, context, checkpointAfte
             const returned = await execute(args, elements, document, transformContext, comment, nodes);
             if (returned !== undefined)
               throw new Error('Comment commands edit elements directly and must not return a value');
-            comment.remove();
+            removeCommand(comment, fullDocument ? null : document.body);
           }
         } else {
           const execute = new AsyncFunction(
@@ -79,9 +136,17 @@ self.onmessage = async ({ data: { code, transformations, context, checkpointAfte
       logs.push(`${transform.name}: ${Math.round(performance.now() - started)} ms`);
       if (logs.length === checkpointAfter) checkpoint = document ? serialize() : code;
     }
-    self.postMessage({ code: document ? serialize() : code, logs, checkpoint });
+    self.postMessage({
+      code: document ? serialize() : code,
+      logs,
+      checkpoint
+    });
   } catch (error) {
-    self.postMessage({ error: `${currentName}: ${error.message}. No changes were applied.` });
+    self.postMessage({
+      error: `${currentName}: ${error.message}. No changes were applied.`
+    });
   }
 };
-self.postMessage({ ready: true });
+self.postMessage({
+  ready: true
+});
