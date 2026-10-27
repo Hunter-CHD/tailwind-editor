@@ -77,6 +77,7 @@ export async function start() {
   const documentSidebar = bindDocumentSidebar({ workspace, openDocument, save });
   const editor = await createEditor($('#editor'), workspace.settings, (content) => {
     clearRenderError();
+    if (activeDocument().content !== content) activeDocument().lastEditedAt = Date.now();
     activeDocument().content = content;
     pendingEditorTransforms = true;
     editingBoundary = false;
@@ -252,6 +253,7 @@ export async function start() {
       pendingEditorTransforms = false;
       document.content = result;
       if (result !== activeDocument().content) {
+        activeDocument().lastEditedAt = Date.now();
         activeDocument().content = result;
         editor.applyTransformation(result);
         showHtmlStatus(valid);
@@ -561,6 +563,7 @@ export async function start() {
   function renameDocument(id) {
     const item = workspace.documents.find((item) => item.id === id);
     askName('Rename document', item.name, (name) => {
+      if (item.name !== name) item.lastEditedAt = Date.now();
       item.name = name;
       renderDocuments();
       save();
@@ -571,6 +574,7 @@ export async function start() {
     const copy = structuredClone(workspace.documents.find((item) => item.id === id));
     copy.id = crypto.randomUUID();
     copy.name = `${copy.name} copy`;
+    copy.createdAt = copy.lastEditedAt = Date.now();
     workspace.documents.push(copy);
     openDocument(copy.id);
   }
@@ -751,6 +755,11 @@ export async function start() {
       const tailwindBaseSize = validateTailwindBaseSize(
         $('#override-tailwind-base').checked ? $('#tailwind-base-size').valueAsNumber : null,
       );
+      const document = activeDocument();
+      if (JSON.stringify(document.colors) !== JSON.stringify(validatedColors) ||
+        document.tailwindBaseSize !== tailwindBaseSize ||
+        document.preflight !== $('#preflight').checked || document.safelist !== $('#safelist').value)
+        document.lastEditedAt = Date.now();
       activeDocument().colors = validatedColors;
       activeDocument().tailwindBaseSize = tailwindBaseSize;
       activeDocument().preflight = $('#preflight').checked;

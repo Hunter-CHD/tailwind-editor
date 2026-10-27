@@ -154,7 +154,7 @@ async function writeWorkspace(workspace) {
       return { id, name: `${documentName(name)}.html`, content, hash: cached.hash };
     }),
   );
-  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize, folderId, lastOpenedAt }) => ({
+  const metadata = workspace.documents.map(({ id, name, colors, safelist, preflight, tailwindBaseSize, folderId, lastOpenedAt, createdAt, lastEditedAt }) => ({
     id,
     name,
     colors,
@@ -163,6 +163,8 @@ async function writeWorkspace(workspace) {
     tailwindBaseSize: validateTailwindBaseSize(tailwindBaseSize),
     folderId: folderId ?? null,
     lastOpenedAt: lastOpenedAt ?? 0,
+    createdAt: createdAt ?? null,
+    lastEditedAt: lastEditedAt ?? null,
   }));
   const workspaceMetadata = {
     version: workspace.version,
@@ -325,6 +327,10 @@ export function validateWorkspace(value) {
     document.folderId = folderIds.has(item.folderId) ? item.folderId : null;
     document.lastOpenedAt = Number.isFinite(item.lastOpenedAt) && item.lastOpenedAt >= 0
       ? item.lastOpenedAt : 0;
+    document.lastEditedAt = Number.isFinite(item.lastEditedAt) && item.lastEditedAt >= 0 && item.lastEditedAt <= 8640000000000000
+      ? item.lastEditedAt : null;
+    document.createdAt = Number.isFinite(item.createdAt) && item.createdAt >= 0 && item.createdAt <= 8640000000000000
+      ? item.createdAt : null;
     if (item.colors) document.colors = validateColors(item.colors);
     return document;
   });

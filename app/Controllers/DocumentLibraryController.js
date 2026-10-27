@@ -1,5 +1,11 @@
 const $ = (selector) => document.querySelector(selector);
 
+function formatDocumentDate(date) {
+  const pad = (value) => String(value).padStart(2, '0');
+  const hours = date.getHours();
+  return `${String(date.getFullYear()).padStart(4, '0')}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(hours % 12 || 12)}:${pad(date.getMinutes())}${hours < 12 ? 'am' : 'pm'}`;
+}
+
 export function recentDocuments(workspace) {
   return [...workspace.documents].sort((a, b) =>
     Number(b.id === workspace.activeId) - Number(a.id === workspace.activeId) ||
@@ -41,6 +47,14 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
       (selectedFolder === '' ? !item.folderId : item.folderId === selectedFolder));
     if (!query) {
       if ($('#library-sort').value === 'name') results.sort((a, b) => a.name.localeCompare(b.name));
+      else if ($('#library-sort').value.startsWith('created-')) {
+        const direction = $('#library-sort').value === 'created-newest' ? -1 : 1;
+        results.sort((a, b) => {
+          if (a.createdAt == null) return b.createdAt == null ? 0 : 1;
+          if (b.createdAt == null) return -1;
+          return direction * (a.createdAt - b.createdAt);
+        });
+      }
       else {
         const order = new Map(recentDocuments(workspace).map((item, i) => [item.id, i]));
         results.sort((a, b) => order.get(a.id) - order.get(b.id));
@@ -69,6 +83,25 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
       const details = document.createElement('small');
       details.textContent = `${item.folderName}${item.id === workspace.activeId ? ' · Editing' : ''}`;
       open.append(details);
+      const dates = document.createElement('small');
+      dates.className = 'library-document-dates';
+      for (const [field, label, className] of [
+        ['createdAt', 'Created', 'library-document-created'],
+        ['lastEditedAt', 'Updated', 'library-document-updated'],
+      ]) {
+        if (dates.childNodes.length) dates.append(' · ');
+        const detail = document.createElement('span');
+        detail.className = className;
+        if (item[field] != null) {
+          const time = document.createElement('time');
+          const date = new Date(item[field]);
+          time.dateTime = date.toISOString();
+          time.textContent = formatDocumentDate(date);
+          detail.append(`${label}: `, time);
+        } else detail.textContent = `${label}: unknown`;
+        dates.append(detail);
+      }
+      open.append(dates);
       const move = document.createElement('select');
       move.setAttribute('aria-label', `Folder for ${item.name}`);
       for (const folder of [{ id: '', name: 'Unfiled' }, ...workspace.folders]) {
@@ -84,7 +117,9 @@ export function bindDocumentLibrary({ workspace, save, openDocument, renderDocum
         $('#library-search').focus();
       });
       const rename = button('Rename', () => askName('Rename document', item.name, (name) => {
-        workspace.documents.find((document) => document.id === item.id).name = name;
+        const document = workspace.documents.find((document) => document.id === item.id);
+        if (document.name !== name) document.lastEditedAt = Date.now();
+        document.name = name;
         changed();
       }));
       rename.setAttribute('aria-label', `Rename ${item.name}`);

@@ -71,6 +71,7 @@ export function documentName(name) {
 }
 
 export function newDocument(name = 'Untitled', content = '', theme = themes.light) {
+  const now = Date.now();
   return {
     id: crypto.randomUUID(),
     name: documentName(name),
@@ -81,6 +82,8 @@ export function newDocument(name = 'Untitled', content = '', theme = themes.ligh
     tailwindBaseSize: null,
     folderId: null,
     lastOpenedAt: 0,
+    createdAt: now,
+    lastEditedAt: now,
   };
 }
 

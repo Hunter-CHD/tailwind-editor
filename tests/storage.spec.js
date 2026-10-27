@@ -5,6 +5,30 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./preview.html');
 });
 
+test('document dates survive storage and backups while legacy and invalid times stay unknown', async ({ page }) => {
+  const result = await page.evaluate(async () => {
+    const { newWorkspace } = await import('./config/editor.js');
+    const { saveWorkspace, loadWorkspace, validateWorkspace } = await import('./app/Models/Workspace.js');
+    const workspace = newWorkspace();
+    const initial = workspace.documents[0];
+    const matchingInitialDates = initial.createdAt === initial.lastEditedAt && Number.isFinite(initial.createdAt);
+    workspace.documents[0].createdAt = 1600000000000;
+    workspace.documents[0].lastEditedAt = 1700000000000;
+    await saveWorkspace(workspace);
+    const { workspace: loaded } = await loadWorkspace();
+    const backup = validateWorkspace(JSON.parse(JSON.stringify(loaded)));
+    const invalid = [undefined, null, -1, 'yesterday', Infinity, 8640000000000001].map((timestamp) => {
+      const document = validateWorkspace({ ...workspace, documents: [{ ...workspace.documents[0], lastEditedAt: timestamp, createdAt: timestamp }] }).documents[0];
+      return [document.createdAt, document.lastEditedAt];
+    });
+    return { loaded: loaded.documents[0], backup: backup.documents[0], invalid, matchingInitialDates };
+  });
+  expect(result.matchingInitialDates).toBe(true);
+  expect(result.loaded).toMatchObject({ createdAt: 1600000000000, lastEditedAt: 1700000000000 });
+  expect(result.backup).toEqual(result.loaded);
+  expect(result.invalid).toEqual(Array.from({ length: 6 }, () => [null, null]));
+});
+
 test('pins survive storage and backups, default for legacy data, and discard missing or duplicate IDs', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const { newWorkspace, newDocument } = await import('./config/editor.js');
@@ -218,6 +242,8 @@ test('documents are HTML Files with linked metadata and only changed records are
       tailwindBaseSize: document.tailwindBaseSize,
       folderId: document.folderId,
       lastOpenedAt: document.lastOpenedAt,
+      createdAt: document.createdAt,
+      lastEditedAt: document.lastEditedAt,
     });
   }
   await instrumentWrites(page);
