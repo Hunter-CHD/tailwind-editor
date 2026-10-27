@@ -21,6 +21,32 @@ async function seed(page, folders = []) {
 }
 
 for (const mobile of [false, true]) {
+  test(`document settings show the active document dates on ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
+    if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+    await seed(page);
+    await page.locator('[data-action="library"]').click();
+    const marketing = page.locator('#library-results li').filter({ hasText: 'Marketing' });
+    const created = await marketing.locator('.library-document-created time').textContent();
+    const modified = await marketing.locator('.library-document-updated time').textContent();
+    await marketing.locator('.library-document-open').click();
+    await page.getByRole('button', { name: 'Document settings', exact: true }).click();
+    const settings = page.locator('#document-settings-dialog');
+    await expect(settings.locator('#document-settings-dates')).toHaveText(`Created: ${created} · Last modified: ${modified}`);
+    const original = await settings.locator('#document-modified-at').getAttribute('datetime');
+    await settings.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Document settings', exact: true }).click();
+    await expect(settings.locator('#document-modified-at')).toHaveAttribute('datetime', original);
+    await page.screenshot({ path: test.info().outputPath('document-settings-dates.png') });
+    expect(await settings.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await settings.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.locator('[data-action="library"]').click();
+    await page.locator('#library-results .library-document-open').filter({ hasText: 'Document 1' }).click();
+    await page.getByRole('button', { name: 'Document settings', exact: true }).click();
+    await expect(settings.locator('#document-settings-name')).toHaveText('Document 1');
+    await expect(settings.locator('#document-created-at')).toHaveText('unknown');
+    await expect(settings.locator('#document-created-at')).not.toHaveAttribute('datetime');
+  });
+
   test(`document library organizes, searches, and persists documents on ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
     if (mobile) await page.setViewportSize({ width: 390, height: 844 });
     await seed(page);

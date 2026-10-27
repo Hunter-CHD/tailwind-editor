@@ -733,10 +733,12 @@ dialog::backdrop {
   display: block;
   margin-top: 5px;
 }
-.library-document-dates {
+.library-document-dates,
+#document-settings-dates {
   font-variant-numeric: tabular-nums;
 }
-.library-document-dates > span {
+.library-document-dates > span,
+#document-settings-dates > span {
   display: inline-block;
   white-space: nowrap;
 }

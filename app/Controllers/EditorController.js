@@ -16,6 +16,7 @@ import { bindDocumentLibrary } from './DocumentLibraryController.js';
 import { bindDocumentSidebar } from './DocumentSidebarController.js';
 import { bindDocumentContextMenu } from './DocumentContextMenu.js';
 import { createPreviewRenderer } from '../Services/Preview.js';
+import { formatDocumentDate } from '../Services/DocumentDates.js';
 
 const $ = (selector) => document.querySelector(selector);
 const size = (text) => `${(new Blob([text]).size / 1024).toFixed(1)} KB`;
@@ -639,6 +640,20 @@ export async function start() {
     },
     'document-settings': () => {
       $('#document-settings-name').textContent = activeDocument().name;
+      for (const [selector, timestamp] of [
+        ['#document-created-at', activeDocument().createdAt],
+        ['#document-modified-at', activeDocument().lastEditedAt],
+      ]) {
+        const time = $(selector);
+        if (timestamp == null) {
+          time.textContent = 'unknown';
+          time.removeAttribute('datetime');
+        } else {
+          const date = new Date(timestamp);
+          time.dateTime = date.toISOString();
+          time.textContent = formatDocumentDate(date);
+        }
+      }
       $('#preflight').checked = activeDocument().preflight;
       $('#override-tailwind-base').checked = activeDocument().tailwindBaseSize != null;
       $('#tailwind-base-size').disabled = !$('#override-tailwind-base').checked;
