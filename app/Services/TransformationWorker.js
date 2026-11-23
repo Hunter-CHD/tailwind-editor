@@ -2,6 +2,9 @@ import {
   DOMParser,
   parseHTML
 } from 'https://cdn.jsdelivr.net/npm/linkedom@0.18.9/worker.js';
+import {
+  createTransformationApi
+} from './TransformationApi.js';
 
 globalThis.DOMParser = DOMParser;
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
@@ -83,7 +86,7 @@ self.onmessage = async ({
           if (!/^[a-zA-Z_][\w-]*$/.test(command))
             throw new Error('Comment commands need a prefix using letters, numbers, underscores, or hyphens, starting with a letter or underscore');
           const execute = new AsyncFunction(
-            'args', 'elements', 'document', 'context', 'comment', 'nodes',
+            'args', 'elements', 'document', 'context', 'comment', 'nodes', 'api',
             `"use strict";\n${transform.code}`,
           );
           // Collect before mutating: moving siblings must not disrupt comment traversal.
@@ -106,7 +109,7 @@ self.onmessage = async ({
             const nodes = [];
             for (let node = comment.nextSibling; node; node = node.nextSibling) nodes.push(node);
             const elements = nodes.filter((node) => node.nodeType === 1);
-            const returned = await execute(args, elements, document, transformContext, comment, nodes);
+            const returned = await execute(args, elements, document, transformContext, comment, nodes, createTransformationApi(document));
             if (returned !== undefined)
               throw new Error('Comment commands edit elements directly and must not return a value');
             removeCommand(comment, fullDocument ? null : document.body);
@@ -115,9 +118,10 @@ self.onmessage = async ({
           const execute = new AsyncFunction(
             'document',
             'context',
+            'api',
             `"use strict";\n${transform.code}`,
           );
-          const returned = await execute(document, transformContext);
+          const returned = await execute(document, transformContext, createTransformationApi(document));
           if (returned !== undefined)
             throw new Error(
               'DOM transforms edit document directly and must not return a value. Use String mode to return HTML.',
@@ -128,8 +132,8 @@ self.onmessage = async ({
           code = serialize();
           document = null;
         }
-        const execute = new AsyncFunction('code', 'context', `"use strict";\n${transform.code}`);
-        const result = await execute(code, transformContext);
+        const execute = new AsyncFunction('code', 'context', 'api', `"use strict";\n${transform.code}`);
+        const result = await execute(code, transformContext, createTransformationApi(null));
         if (typeof result !== 'string') throw new Error('String transforms must return a string.');
         code = result;
       }
@@ -143,7 +147,8 @@ self.onmessage = async ({
     });
   } catch (error) {
     self.postMessage({
-      error: `${currentName}: ${error.message}. No changes were applied.`
+      error: `${currentName}: ${error.message}. No changes were applied.`,
+      diagnostics: error.diagnostics
     });
   }
 };
