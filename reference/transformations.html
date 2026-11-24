@@ -25,6 +25,9 @@
       <a href="#dom">Shared DOM API</a>
       <a href="#string">String API</a>
       <a href="#commands">Comment command API</a>
+      <a href="#helpers">Transformation helpers</a>
+      <a href="#structure">Emmet structure helpers</a>
+      <a href="#classes">Utility class expressions</a>
       <a href="#context">Context &amp; async code</a>
       <a href="#recipes">Example recipes</a>
       <a href="#json">JSON import &amp; fields</a>
@@ -106,7 +109,7 @@ document.querySelectorAll('a[target="_blank"]').forEach((link) =&gt; {
         <h2>Shared DOM API</h2>
         <p><strong>Input setting:</strong> Shared DOM · <code>kind: "dom"</code></p>
         <pre><code>// Effective handler signature (the app supplies the wrapper):
-async function handler(document, context) {
+async function handler(document, context, api) {
   // Your code goes here.
 }</code></pre>
         <div class="reference-table">
@@ -127,6 +130,10 @@ async function handler(document, context) {
                 <td>Frozen object with the HTML document name and this transform's stage. See Context below.</td>
               </tr>
               <tr>
+                <td><code>api</code></td>
+                <td>Frozen helper object for selection, indentation, argument splitting, and JSON metadata. See <a href="#helpers">Transformation helpers</a>.</td>
+              </tr>
+              <tr>
                 <td>Return value</td>
                 <td>Must be <code>undefined</code>. Omit return or use a bare <code>return;</code>. Returning a node, string, null, or other value rejects the pipeline.</td>
               </tr>
@@ -145,13 +152,14 @@ document.querySelectorAll('[editor-meta]').forEach((element) =&gt; {
         <h2>String API</h2>
         <p><strong>Input setting:</strong> String · <code>kind: "string"</code></p>
         <pre><code>// Effective handler signature:
-async function handler(code, context) {
+async function handler(code, context, api) {
   // Must return a string containing the next HTML source.
 }</code></pre>
         <p><code>code</code> is the current HTML string, including changes made by previous transforms. Return the complete next string, not just a replacement fragment. An empty string is a valid string return. Missing returns and all non-string values reject the pipeline.</p>
         <pre><code>// Normalize curly double quotes in text and markup.
 return code.replaceAll('\u201c', '"').replaceAll('\u201d', '"');</code></pre>
         <p>String replacement affects every matching occurrence, including scripts, styles, attributes, and comments. Prefer Shared DOM when the operation depends on HTML structure. A string transform does not get a <code>document</code> parameter.</p>
+        <p>The frozen <code>api</code> object supplies <a href="#helpers"><code>api.splitArgs</code></a> and <a href="#classes">class expression helpers</a> in String mode. DOM helpers and structure operations are available only in DOM and comment handlers.</p>
       </section>
 
       <section id="commands">
@@ -164,7 +172,7 @@ return code.replaceAll('\u201c', '"').replaceAll('\u201d', '"');</code></pre>
   &lt;article&gt;Second card&lt;/article&gt;
 &lt;/section&gt;</code></pre>
         <pre><code>// Effective handler signature:
-async function handler(args, elements, document, context, comment, nodes) {
+async function handler(args, elements, document, context, comment, nodes, api) {
   // Mutate the DOM. Do not return a value.
 }</code></pre>
         <div class="reference-table">
@@ -200,6 +208,10 @@ async function handler(args, elements, document, context, comment, nodes) {
                 <td><code>nodes</code></td>
                 <td>Array snapshot of every following sibling node, including elements, text, and comments. Use it when preserving text and whitespace matters.</td>
               </tr>
+              <tr>
+                <td><code>api</code></td>
+                <td>Same frozen <a href="#helpers">helper API</a> as DOM handlers. Pass <code>elements</code> to <code>api.select</code> to restrict selection to the command's scope.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -220,6 +232,168 @@ for (const element of elements) {
         <p>Matching comments are collected in document order at the start of each handler pass. Each connected comment with a parent element runs once. Its sibling arrays are captured immediately before invocation, so earlier mutations affect later calls. Moving a node does not disrupt iteration of an existing array. Detached comments are skipped. Newly inserted command comments wait for a later handler pass.</p>
         <p>Commands always run automatically and have no Run once button. Allowed stages are Editor and Preview + export. Editor commands consume comments in saved source under the usual editing guards. Preview commands keep calling comments in source and consume them in each output. Imported manual commands normalize to automatic; export-stage commands normalize to preview. When two handlers use the same prefix, the first normally consumes the comments before the second can see them.</p>
         <p>If any invocation throws or returns a value, the worker rejects the whole pipeline, including earlier mutations and comment removal.</p>
+      </section>
+
+      <section id="helpers">
+        <h2>Transformation helpers</h2>
+        <p>Handlers receive an additional frozen <code>api</code> object. Existing arguments and return rules are unchanged. Do not redeclare <code>api</code> at the top level of a handler. DOM and comment handlers have every helper below; String handlers have <code>api.splitArgs</code> and <code>api.classes</code>, so string-only pipelines do not parse HTML for helpers. Helpers operate on the current shared document and use the existing pipeline timeout and error handling. They do not retain state between runs.</p>
+
+        <h3>Scoped selection</h3>
+        <p><code>api.select(selector, roots = document)</code> accepts a CSS selector and a single root or iterable of roots. It includes each matching root element and matching descendants. It returns an array snapshot with duplicates removed, ordered by the current document. Detached matches follow connected matches in discovery order. Selection never expands the supplied roots into other parts of the document. Empty or invalid selectors throw, even with no roots.</p>
+        <p><code>api.outermost(elements)</code> deduplicates an iterable of elements and removes elements contained by another selected element. It preserves the remaining input order. Use this before walking selected subtrees to avoid counting descendants twice.</p>
+        <pre><code>// Comment command: select following roots and their descendants.
+const [selector, tag] = api.splitArgs(args);
+const matches = api.select(selector, elements);
+for (const element of matches) {
+  element.setAttribute('data-label', tag);
+}
+
+// Analyze each selected subtree once.
+const roots = api.outermost(matches);</code></pre>
+
+        <h3>Arguments with quoted or nested separators</h3>
+        <p><code>api.splitArgs(source, separator = '|')</code> returns trimmed strings, preserving empty arguments, quotes, and escapes. Separators inside single or double quotes, balanced parentheses, square brackets, or braces are ignored. A backslash escapes the next character for splitting purposes and stays in the result. Unclosed quotes/brackets, mismatched brackets, and trailing escapes throw. The source must be a string and the separator must be one character; use a plain delimiter such as <code>|</code> or <code>,</code>. This is a splitter, not a decoder or expression evaluator.</p>
+        <pre><code>api.splitArgs('[title="a|b"] | +rounded-lg | -hidden');
+// ['[title="a|b"]', '+rounded-lg', '-hidden']
+api.splitArgs(':is(h2,h3), [data-label="a,b"]', ',');
+// [':is(h2,h3)', '[data-label="a,b"]']</code></pre>
+        <p>The calling comment grammar is unchanged: it still requires a final semicolon and cannot contain any other semicolons, including inside quotes. Pipe characters in selectors are delimiters unless quoted, bracketed, or escaped.</p>
+
+        <h3>Indent generated wrappers</h3>
+        <p><code>api.indentation(node, { unit = '  ' } = {})</code> returns <code>{ indent, unit, newline }</code>. It reads trailing indentation and the first line ending from text nodes immediately before the supplied node, defaulting to empty indentation and LF when unavailable. The indentation unit defaults to two spaces; pass <code>'\t'</code> for tabs. The unit is explicit rather than guessed from indentation depth.</p>
+        <p><code>api.formatGenerated(root, options = {})</code> formats the supplied element and returns it. Options are <code>generated</code> (an iterable of elements, default <code>[root]</code>) and overrides for <code>indent</code>, <code>unit</code>, and <code>newline</code>. Defaults come from <code>api.indentation(root)</code>. Only elements in <code>generated</code> are formatted; include the root to format it. Recursion follows generated wrappers only. Existing subtrees are moved neither by this helper nor reformatted internally.</p>
+        <p>For an eligible wrapper, whitespace-only text nodes are replaced with indentation around child elements. Mixed content, comments, empty wrappers, and <code>pre</code>, <code>textarea</code>, <code>script</code>, and <code>style</code> are left untouched, including their descendants. Formatting is explicit because inserting whitespace can affect rendering. The helper does not add whitespace outside the root or clean up positions from which content was moved. Repeated formatting settles to the same output.</p>
+        <pre><code>// Comment command: wrap nodes using ordinary DOM APIs.
+const spacing = api.indentation(comment);
+const wrapper = document.createElement('section');
+const inner = document.createElement('div');
+wrapper.append(inner);
+comment.after(wrapper);
+inner.append(...nodes);
+api.formatGenerated(wrapper, {
+  ...spacing,
+  generated: [wrapper, inner]
+});
+// Existing elements inside inner retain their internal text/formatting.</code></pre>
+
+        <h3>JSON document metadata</h3>
+        <p><code>api.readJSON(id)</code> reads a script element by its nonempty ID and returns its parsed JSON value. A missing element returns <code>undefined</code>; JSON <code>null</code> remains <code>null</code>. Existing elements must be scripts with <code>type="application/json"</code> (case-insensitive, ignoring surrounding type whitespace). A conflicting element or invalid JSON throws an error identifying the ID. Application-specific fields and types remain the transformation's responsibility.</p>
+        <p><code>api.ensureJSON(id, defaults, { parent = document.body, editorMeta = true } = {})</code> returns existing parsed metadata unchanged, or creates a JSON script at the beginning of the supplied parent. It does not merge defaults, replace malformed metadata, or update existing scripts. New scripts receive the ID, JSON type, and by default an empty <code>editor-meta</code> attribute. That attribute is only a marker; it does not automatically remove metadata from preview or export. Set <code>editorMeta: false</code> to omit it.</p>
+        <p>New data uses <code>JSON.stringify(defaults, null, 2)</code> with surrounding newlines and escapes less-than characters as <code>\u003c</code> to prevent embedded HTML closing the script. Defaults follow standard JSON serialization rules; values that cannot produce JSON throw. Both helpers return independent parsed values, not live bindings: changing the returned object does not update the script.</p>
+        <pre><code>// DOM / Editor: add only when missing.
+api.ensureJSON('frontmatter', {
+  title: context.name,
+  description: 'Document Description',
+  baseURL: ''
+});
+
+// Another DOM or comment transformation:
+const metadata = api.readJSON('frontmatter');
+if (!metadata || typeof metadata.baseURL !== 'string') return;
+// Continue with this transformation's URL policy.</code></pre>
+      </section>
+
+      <section id="structure">
+        <h2>Emmet structure helpers</h2>
+        <p>DOM and comment handlers can opt into <code>api.structure</code>. Existing saved transformations are not rewritten. Structure helpers preprocess capture references, resolve the expression through pinned Emmet <code>2.4.11</code> and abbreviation parser <code>2.3.3</code>, then create nodes directly in the shared document. Captured HTML is never serialized into an abbreviation or reparsed. Emmet loads on the first parse in a worker; that dependency request consumes the same three-second pipeline budget as other awaited work.</p>
+        <h3>Template syntax</h3>
+        <p>Supported syntax includes literal tags, <code>.class</code>, <code>#id</code>, attribute brackets, child <code>&gt;</code>, sibling <code>+</code>, climb-up <code>^</code>, groups, integer repetition, Emmet numbering, and <code>lorem</code>/<code>loremN</code>. Bare shorthand such as <code>.card</code> creates a div regardless of context. Tags are literal: <code>a</code> does not add a default href and <code>img</code> does not add src or alt. Standard Emmet nesting applies: <code>div&gt;h2+p</code> puts both elements inside the div.</p>
+        <p>Use standalone <code>@1</code>, <code>@2</code>, and so on to place captures. <code>@1*3</code> is equivalent to three references to the entire capture. The first occurrence in each group's expanded template receives the original nodes; subsequent occurrences receive deep clones taken from snapshots before restructuring. IDs and references are preserved exactly, including duplicates. Authors are responsible for uniqueness. Unused captures and zero repetitions stay in place; their selectors still participate in matching and validation.</p>
+        <p>Capture references cannot have children, classes, IDs, or attribute patches. <code>@1&gt;span</code> and <code>@1.featured</code> throw, even inside a zero-repeat branch. Use another transformation to modify placed content. Literal text braces, snippets, editor fields, implicit repetition, explicit self-closing syntax, and namespace construction are unsupported. Braces are reserved outside quoted attribute values. Place operator characters and grouped utilities inside quoted attribute values. Unquoted whitespace is allowed only around structural operators.</p>
+        <pre><code>// DOM handler: move one heading and one paragraph into a section.
+await api.structure.rewrite(
+  [...document.body.children],
+  '{h3}{p{1}}',
+  'section.topic&gt;(@1+div.body&gt;@2)',
+  { format: false }
+);
+// Repeating @2 would clone the whole paragraph capture.
+// Omit return: DOM and comment handlers must not return these helpers' values.</code></pre>
+        <h3>Convenience operations</h3>
+        <div class="reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Contract</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>await api.structure.wrap(nodes, expression, options = {})</code></td>
+                <td>Wrap one nonempty contiguous sibling node range. The entire range is capture @1, including text and comments. Output is inserted at the first node's position.</td>
+              </tr>
+              <tr>
+                <td><code>await api.structure.sections(nodes, selector, expression = 'section', options = {})</code></td>
+                <td>Each matching direct sibling element starts a section containing all nodes until the next match. Each complete range becomes @1 in its own group. Content before the first match stays outside.</td>
+              </tr>
+              <tr>
+                <td><code>await api.structure.rewrite(roots, captures, expression, options = {})</code></td>
+                <td>Find anchor elements within supplied roots and their descendants. Later captures select element siblings after each anchor, bounded by the next anchor in the same parent. Unmatched elements, text, and comments remain in the source parent.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>All three return arrays of placed root nodes. The document is mutated; the array is for further JavaScript use, not a handler return value. Options are <code>format</code> (default true) and <code>unit</code> (default two spaces). Formatting indents generated wrappers, preserves captured internal content and meaningful text/comments, and removes only separate leftover lines of indentation before moved elements. <code>format: false</code> also disables that cleanup. Line endings and base indentation are read at each anchor.</p>
+        <p>For wrap and sections, a single linear element chain can omit @1; content is inserted in its deepest leaf. Branching or text-producing templates require an explicit @1. Explicit templates may leave captures unused. Empty ranges and no matching anchors throw. Section and range inputs must be contiguous nodes from the current document; rewrite roots must be attached elements from that document.</p>
+        <h3>Capture fields and structured specifications</h3>
+        <p><code>api.structure.selectors(source)</code> parses a capture field into specifications. A single CSS selector defines @1 as the anchor. Otherwise use successive brace groups, such as <code>{h3}{p{1,3}}{aside{0,1}}</code>. The first capture is always one anchor and cannot have an explicit quantifier. Later captures default to minimum one and no maximum. Supported counts are <code>{n}</code>, <code>{n,m}</code>, and <code>{n,}</code>. Optional captures use minimum zero. Omitted lower bounds and empty quantifiers throw.</p>
+        <p>Rewrite also accepts an array of <code>{ selector, min = 1, max = Infinity, relation = 'any-following' }</code>. On non-anchor captures, <code>relation: 'next'</code> requires the anchor's next element sibling. <code>'following'</code> and <code>'any-following'</code> select later eligible siblings within the window. CSS selectors keep their normal meanings; the interpreter does not reinterpret <code>A + B</code> relative to an anchor.</p>
+        <p>Each capture takes the first matching elements up to its maximum in document order. Capture fields do not impose sequential order between different captures. Overlapping selected nodes or ancestor/descendant ownership within or across groups are rejected, even for unused captures. Repeating a destination reference to one capture is allowed and does not count as overlapping ownership.</p>
+        <pre><code>// Optional paragraph, but only if it immediately follows its heading.
+await api.structure.rewrite(elements, [
+  { selector: 'h3' },
+  { selector: 'p', min: 0, max: 1, relation: 'next' }
+], 'details&gt;(summary&gt;@1)+div.body&gt;@2');
+// @1 is still an h3 inside summary. Placement never renames it.</code></pre>
+        <h3>Explicit planning</h3>
+        <pre><code>const template = await api.structure.parse('section&gt;(@1+div&gt;@2)');
+const plan = api.structure.plan({
+  template,
+  mode: 'captures',
+  roots: elements,
+  captures: '{h3}{p}',
+  format: true,
+  unit: '  '
+});
+const placed = api.structure.apply(plan);</code></pre>
+        <p>Parse returns an opaque frozen template handle with <code>source</code> and <code>references</code>. Plan is synchronous and returns an opaque frozen handle with <code>mode</code> and group count. Mode defaults to <code>'captures'</code>. Mode <code>'range'</code> takes <code>nodes</code> as @1; mode <code>'sections'</code> takes <code>nodes</code> and one anchor specification. Explicit plans do not add implicit @1 references. Templates may be reused within the worker; plans are document-bound, single-use, and reject source changes before applying. Do not change the document between planning and applying.</p>
+        <h3>Errors and limits</h3>
+        <p>Every group must satisfy its required captures before any group is applied. Failures report every partial match, its anchor path and identifying text, missing capture, expected bounds, actual count, and search window. <code>error.diagnostics</code> exposes structured entries for partial matches and overlap conflicts; the pipeline service preserves them across the worker boundary. An uncaught error rejects the entire pipeline output, including earlier transforms. Full messages remain available in the editor status tooltip.</p>
+        <p>Limits are 16,000 source characters, 64 levels of syntax/tree nesting, 5,000 expanded template nodes, 500 groups, and 20,000 total output/captured node units (a conservative count including descendants and repeated placements). Each lorem instruction allows at most 1,000 requested words. The existing pipeline timeout also applies. The internal tag prefix <code>te-capture-</code> is reserved for placeholders. Invalid void-element children and new SVG/MathML namespaces are rejected.</p>
+        <h3>Replace existing handlers explicitly</h3>
+        <pre><code>// wrap command body
+await api.structure.wrap(nodes, args);
+
+// acc command body
+const [selector, expression = 'section'] = api.splitArgs(args);
+await api.structure.sections(nodes, selector, expression);
+
+// modstruct command body
+const [captures, expression] = api.splitArgs(args);
+await api.structure.rewrite(elements, captures, expression);</code></pre>
+        <p>These are three separate handler bodies. Change old $1-style destination slots to @1 and review standard Emmet nesting, strict incomplete-group errors, and whitespace behavior before switching an existing command. There is no automatic migration or legacy parser mode.</p>
+      </section>
+
+      <section id="classes">
+        <h2>Utility class expressions</h2>
+        <p><code>api.classes</code> is available in all handler types. It does not load Emmet. Helpers preserve unknown utilities and grouped contents, and reject unbalanced quotes/brackets or unfinished escapes. Parsing expressions does not validate that Twind supports a utility.</p>
+        <ul>
+          <li><code>api.classes.tokenize(value)</code> splits on whitespace outside balanced parentheses, square brackets, braces, quotes, and escapes.</li>
+          <li><code>api.classes.splitVariants(expression)</code> splits on top-level colons. Colons in arbitrary values and groups remain intact.</li>
+          <li><code>api.classes.edit(element, { add = [], remove = [] })</code> removes exact whole expressions, then adds expressions without duplicates. Each option accepts a string or array of strings. It returns the element. Removing flex does not remove flex inside <code>md:(flex gap-4)</code>. This helper requires an actual element.</li>
+          <li><code>api.classes.sort(value, { categories, breakpoints } = {})</code> returns a string with stable category/breakpoint ordering. Categories are an ordered array of arrays of regular expressions. Breakpoints default to xs, sm, md, lg, xl, 2xl. Unknown expressions retain their relative order after known categories; grouped expressions come last with their contents unchanged.</li>
+        </ul>
+        <p>Default categories are position, sizing, layout, spacing, background, border, text, and transitions. Classification ignores leading/trailing important markers and a leading negative marker without changing the output token. Non-breakpoint variants do not independently change order. Multiple recognized breakpoint variants use the greatest configured index. Regex state is not changed by sorting.</p>
+        <pre><code>const element = document.querySelector('.card');
+api.classes.edit(element, {
+  add: ['-mt-4', 'md:(flex gap-4)'],
+  remove: 'hidden'
+});
+element.setAttribute('class', api.classes.sort(element.getAttribute('class')));
+
+api.classes.splitVariants("before:content-['a:b']");
+// ['before', "content-['a:b']"]</code></pre>
       </section>
 
       <section id="context">
